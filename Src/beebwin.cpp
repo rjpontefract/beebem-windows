@@ -496,6 +496,22 @@ void BeebWin::Shutdown()
 
 void BeebWin::ResetBeebSystem(Model NewModelType, bool LoadRoms)
 {
+	switch (NewModelType)
+	{
+	case Model::B:
+		strcpy(m_szTitle, "BeebEm - BBC Model B");
+		break;
+	case Model::IntegraB:
+		strcpy(m_szTitle, "BeebEm - BBC Model B + Integra-B");
+		break;
+	case Model::BPlus:
+		strcpy(m_szTitle, "BeebEm - BBC Model B Plus");
+		break;
+	case Model::Master128:
+		strcpy(m_szTitle, "BeebEm - BBC Master 128");
+		break;
+	}
+
 	SoundReset();
 	if (SoundDefault)
 		SoundInit();
@@ -510,19 +526,23 @@ void BeebWin::ResetBeebSystem(Model NewModelType, bool LoadRoms)
 	if (TubeType == Tube::Acorn65C02)
 	{
 		Init65C02core();
+		strcat(m_szTitle, " (6502 Tube)");
 	}
 	else if (TubeType == Tube::Master512CoPro)
 	{
 		master512CoPro.Reset();
+		strcat(m_szTitle, " (i86 Tube)");		
 	}
 	else if (TubeType == Tube::TorchZ80 || TubeType == Tube::AcornZ80)
 	{
+		strcat(m_szTitle, " (Z80 Tube)");
 		R1Status = 0;
 		ResetTube();
 		init_z80();
 	}
 	else if (TubeType == Tube::AcornArm)
 	{
+		strcat(m_szTitle, " (ARM Tube)");
 		R1Status = 0;
 		ResetTube();
 		if (arm) delete arm;
@@ -530,12 +550,14 @@ void BeebWin::ResetBeebSystem(Model NewModelType, bool LoadRoms)
 	}
 	else if (TubeType == Tube::SprowArm)
 	{
+		strcat(m_szTitle, " (ARM CoPro Tube)");
 		R1Status = 0;
 		ResetTube();
 		if (sprow) delete sprow;
 		sprow = new CSprowCoPro();
 	}
 
+	UpdateWindowTitle();
 	SysVIAReset();
 	UserVIAReset();
 	VideoInit();
@@ -1054,6 +1076,28 @@ void BeebWin::UpdateDisableKeysMenu() {
 	CheckMenuItem(IDM_DISABLEKEYSBREAK, m_DisableKeysBreak);
 	CheckMenuItem(IDM_DISABLEKEYSESCAPE, m_DisableKeysEscape);
 	CheckMenuItem(IDM_DISABLEKEYSSHORTCUT, m_DisableKeysShortcut);
+}
+
+void BeebWin::UpdateWindowTitle()
+{
+	char title[100];
+
+	if (m_EmuPaused)
+	{
+		if (m_ShowSpeedAndFPS)
+			sprintf(title, "%s  Paused", m_szTitle);
+		else
+			sprintf(title, "%s", m_szTitle);
+	}
+	else
+	{
+		if (m_ShowSpeedAndFPS)
+			sprintf(title, "%s  Speed: %2.2f  fps: %2d", m_szTitle, m_RelativeSpeed, (int)m_FramesPerSecond);
+		else
+			sprintf(title, "%s", m_szTitle);
+	}
+
+	SetWindowText(m_hWnd, title);
 }
 
 /****************************************************************************/
@@ -2978,13 +3022,12 @@ void BeebWin::HandleCommand(int MenuId)
 		if (m_ShowSpeedAndFPS)
 		{
 			m_ShowSpeedAndFPS = false;
-			SetWindowText(m_hWnd, WindowTitle);
 		}
 		else
 		{
 			m_ShowSpeedAndFPS = true;
 		}
-
+		UpdateWindowTitle();
 		CheckMenuItem(IDM_SPEEDANDFPS, m_ShowSpeedAndFPS);
 		break;
 
@@ -3894,11 +3937,9 @@ void BeebWin::TogglePause()
 {
 	m_EmuPaused = !m_EmuPaused;
 	CheckMenuItem(IDM_EMUPAUSED, m_EmuPaused);
-	if (m_ShowSpeedAndFPS && m_EmuPaused)
-	{
-		sprintf(m_szTitle, "%s  Paused", WindowTitle);
-		SetWindowText(m_hWnd, m_szTitle);
-	}
+	UpdateWindowTitle();
+
+	
 
 	if (m_EmuPaused)
 	{
@@ -4120,7 +4161,7 @@ void BeebWin::CheckForLocalPrefs(const char *path, bool bLoadPrefs)
 						 0, 0, SWP_NOSIZE);
 			HandleCommand(m_DisplayRenderer);
 			InitMenu();
-			SetWindowText(m_hWnd, WindowTitle);
+			SetWindowText(m_hWnd, m_szTitle);
 			if (m_MenuIdSticks == IDM_JOYSTICK)
 				InitJoystick();
 		}

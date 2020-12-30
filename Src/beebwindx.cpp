@@ -836,11 +836,7 @@ void BeebWin::DisplayFDCBoardInfo(HDC hDC, int x, int y)
 void BeebWin::DisplayTiming(void)
 {
 	if (m_ShowSpeedAndFPS && (m_DisplayRenderer == IDM_DISPGDI || !m_isFullScreen))
-	{
-		sprintf(m_szTitle, "%s  Speed: %2.2f  fps: %2d",
-				WindowTitle, m_RelativeSpeed, (int)m_FramesPerSecond);
-		SetWindowText(m_hWnd, m_szTitle);
-	}
+		UpdateWindowTitle();
 }
 
 /****************************************************************************/
