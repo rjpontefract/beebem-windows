@@ -384,58 +384,61 @@ HRESULT BeebWin::InitDX9(void)
 
 	if (hr == D3D_OK)
 	{
-		pVertices[0].position = D3DXVECTOR3( 0.0f, -511.0f, 0.0f );
-		pVertices[0].color	  = 0x00ffffff;
-		pVertices[0].tu		  = 0.0f;
-		pVertices[0].tv		  = 1.0f;
+		pVertices[0].position = XMVectorSet(0.0f, -511.0f, 0.0f, 0.0f);
+		pVertices[0].color = 0x00ffffff;
+		pVertices[0].tu = 0.0f;
+		pVertices[0].tv = 1.0f;
 
-		pVertices[1].position = D3DXVECTOR3( 0.0f, 0.0f, 0.0f );
-		pVertices[1].color	  = 0x00ffffff;
-		pVertices[1].tu		  = 0.0f;
-		pVertices[1].tv		  = 0.0f;
+		pVertices[1].position = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+		pVertices[1].color = 0x00ffffff;
+		pVertices[1].tu = 0.0f;
+		pVertices[1].tv = 0.0f;
 
-		pVertices[2].position = D3DXVECTOR3( 799.0f, -511.0f, 0.0f );
-		pVertices[2].color	  = 0x00ffffff;
-		pVertices[2].tu		  = 1.0f;
-		pVertices[2].tv		  = 1.0f;
+		pVertices[2].position = XMVectorSet(799.0f, -511.0f, 0.0f, 0.0f);
+		pVertices[2].color = 0x00ffffff;
+		pVertices[2].tu = 1.0f;
+		pVertices[2].tv = 1.0f;
 
-		pVertices[3].position = D3DXVECTOR3( 799.0f, 0.0f, 0.0f );
-		pVertices[3].color	  = 0x00ffffff;
-		pVertices[3].tu		  = 1.0f;
-		pVertices[3].tv		  = 0.0f;
-	
+		pVertices[3].position = XMVectorSet(799.0f, 0.0f, 0.0f,0.0f);
+		pVertices[3].color = 0x00ffffff;
+		pVertices[3].tu = 1.0f;
+		pVertices[3].tv = 0.0f;
+
 		m_pVB->Unlock();
 	}
 
 	if (hr == D3D_OK)
 	{
 		// Set up matrices
-		D3DXMATRIX Ortho2D;
+		XMMATRIX Ortho2D;
 		//D3DXMatrixOrthoOffCenterLH(&Ortho2D, 0.0f, 800.0f, -512.0f, 0.0f, 0.0f, 1.0f);
-		D3DXMatrixIdentity(&Ortho2D);
-		// float l = 0.0f;
+		Ortho2D = XMMatrixIdentity();
+		float l = 0.0f;
 		float r = 800.0f;
 		float b = -512.0f;
 		float t = 0.0f;
 		float zn = 0.0f;
 		float zf = 1.0f;
-		Ortho2D._11 = 2.0f/(r-1.0f);
-		Ortho2D._22 = 2.0f/(t-b);
-		Ortho2D._33 = 1.0f/(zf-zn);
-		Ortho2D._41 = (1.0f+r)/(1.0f-r);
-		Ortho2D._42 = (t+b)/(b-t);
-		Ortho2D._43 = zn/(zn-zf);
 
-		m_pd3dDevice->SetTransform(D3DTS_PROJECTION, &Ortho2D);
+		XMFLOAT4X4 fView;
+		XMStoreFloat4x4(&fView, Ortho2D);
+		fView._11 = 2.0f / (r - 1.0f);
+		fView._22 = 2.0f / (t - b);
+		fView._33 = 1.0f / (zf - zn);
+		fView._41 = (1.0f + r) / (1.0f - r);
+		fView._42 = (t + b) / (b - t);
+		fView._43 = zn / (zn - zf);
+		Ortho2D = XMLoadFloat4x4(&fView);
 
-		D3DXMATRIX Ident;
-		D3DXMatrixIdentity(&Ident);
-		m_pd3dDevice->SetTransform(D3DTS_VIEW, &Ident);
-		m_pd3dDevice->SetTransform(D3DTS_WORLD, &Ident);
+		m_pd3dDevice->SetTransform(D3DTS_PROJECTION, (D3DMATRIX*)&Ortho2D);
+
+		XMMATRIX Ident = XMMatrixIdentity();
+		m_pd3dDevice->SetTransform(D3DTS_VIEW, (D3DMATRIX*)&Ident);
+		m_pd3dDevice->SetTransform(D3DTS_WORLD, (D3DMATRIX*)&Ident);
 
 		// Identity matrix will fill window with our texture
-		D3DXMatrixIdentity(&m_TextureMatrix);
-	}		
+		m_TextureMatrix = XMMatrixIdentity();
+	}
 
 	if (hr == D3D_OK)
 	{
@@ -504,7 +507,7 @@ void BeebWin::RenderDX9(void)
 		if (hr == D3D_OK)
 			hr = m_pd3dDevice->SetTexture(0, m_pTexture);
 		if (hr == D3D_OK)
-			hr = m_pd3dDevice->SetTransform(D3DTS_WORLD, &m_TextureMatrix);
+			hr = m_pd3dDevice->SetTransform(D3DTS_WORLD, (D3DMATRIX*)&m_TextureMatrix);
 		if (hr == D3D_OK)
 			hr = m_pd3dDevice->DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, 4);
 
@@ -657,24 +660,26 @@ void BeebWin::updateLines(HDC hDC, int starty, int nlines)
 					// Scale beeb screen to fill the D3D texture
 					int width = TeletextEnabled ? 552 : ActualScreenWidth;
 					int height = TeletextEnabled ? TTLines : nlines;
-					//D3DXMatrixScaling(&m_TextureMatrix,
-					//				  800.0f/(float)width, 512.0f/(float)height, 1.0f);
-					D3DXMatrixIdentity(&m_TextureMatrix);
-					m_TextureMatrix._11 = 800.0f/(float)width;
-					m_TextureMatrix._22 = 512.0f/(float)height;
+					m_TextureMatrix = XMMatrixScaling(800.0f / (float)width, 512.0f / (float)height, 1.0f);
 
 					if (m_isFullScreen && m_MaintainAspectRatio)
 					{
 						// Aspect ratio adjustment
 						if (m_XRatioAdj > 0.0f)
 						{
-							m_TextureMatrix._11 *= m_XRatioAdj;
-							m_TextureMatrix._41 = m_XRatioCrop * 800.0f;
+							XMFLOAT4X4 fView;
+							XMStoreFloat4x4(&fView, m_TextureMatrix);
+							fView._11 *= m_XRatioAdj;
+							fView._41 = m_XRatioCrop * 800.0f;
+							m_TextureMatrix = XMLoadFloat4x4(&fView);
 						}
 						else if (m_YRatioAdj > 0.0f)
 						{
-							m_TextureMatrix._22 *= m_YRatioAdj;
-							m_TextureMatrix._42 = m_YRatioCrop * -512.0f;
+							XMFLOAT4X4 fView;
+							XMStoreFloat4x4(&fView, m_TextureMatrix);
+							fView._22 *= m_YRatioAdj;
+							fView._42 = m_YRatioCrop * -512.0f;
+							m_TextureMatrix = XMLoadFloat4x4(&fView);
 						}
 					}
 				}

@@ -47,7 +47,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE /* hPrevInstance */,
 
 	OpenLog();
 
-	mainWin = new(std::nothrow) BeebWin();
+	mainWin = new BeebWin();
 
 	if (mainWin == nullptr)
 	{
