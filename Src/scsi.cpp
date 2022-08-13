@@ -123,7 +123,7 @@ void SCSIReset()
 
 	for (int i = 0; i < 4; ++i)
 	{
-		sprintf(buff, "%s\\scsi%d.dat", HardDrivePath, i);
+		sprintf(buff, "%s\\SCSI\\scsi%d.dat", HardDrivePath, i);
 
 		SCSIDisc[i] = fopen(buff, "rb+");
 
@@ -140,7 +140,7 @@ void SCSIReset()
 
 		if (SCSIDisc[i] != nullptr)
 		{
-			sprintf(buff, "%s/scsi%d.dsc", HardDrivePath, i);
+			sprintf(buff, "%s/SCSI/scsi%d.dsc", HardDrivePath, i);
 
 			FILE *f = fopen(buff, "rb");
 

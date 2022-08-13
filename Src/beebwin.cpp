@@ -4954,14 +4954,14 @@ bool BeebWin::CheckUserDataPath(bool Persist)
 		}
 		if (!copy_user_files)
 		{
-			sprintf(path, "%sEconet.cfg", m_UserDataPath);
+			sprintf(path, "%s/Config/Econet.cfg", m_UserDataPath);
 			att = GetFileAttributes(path);
 			if (att == INVALID_FILE_ATTRIBUTES)
 				copy_user_files = true;
 		}
 		if (!copy_user_files)
 		{
-			sprintf(path, "%sAUNMap", m_UserDataPath);
+			sprintf(path, "%s/Config/AUNMap", m_UserDataPath);
 			att = GetFileAttributes(path);
 			if (att == INVALID_FILE_ATTRIBUTES)
 				copy_user_files = true;
@@ -4969,7 +4969,7 @@ bool BeebWin::CheckUserDataPath(bool Persist)
 #ifdef SPEECH_ENABLED
 		if (!copy_user_files)
 		{
-			sprintf(path, "%sPhroms.cfg", m_UserDataPath);
+			sprintf(path, "%s/Config/Phroms.cfg", m_UserDataPath);
 			att = GetFileAttributes(path);
 			if (att == INVALID_FILE_ATTRIBUTES)
 				copy_user_files = true;
@@ -4979,7 +4979,7 @@ bool BeebWin::CheckUserDataPath(bool Persist)
 		{
 			if (strcmp(RomFile, "Roms.cfg") == 0)
 			{
-				sprintf(path, "%sRoms.cfg", m_UserDataPath);
+				sprintf(path, "%s/Config/Roms.cfg", m_UserDataPath);
 				att = GetFileAttributes(path);
 				if (att == INVALID_FILE_ATTRIBUTES)
 					copy_user_files = true;

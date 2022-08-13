@@ -1,4 +1,5 @@
 /****************************************************************
+/****************************************************************
 BeebEm - BBC Micro and Master 128 Emulator
 Copyright (C) 2004  Rob O'Donnell
 Copyright (C) 2005  Mike Wyatt
@@ -516,8 +517,10 @@ void ReadNetwork(void) {
 	unsigned int q;
 	
 	strcpy(TmpPath,EconetCfgPath);
-	strcat(TmpPath,"econet.cfg");
+	strcat(TmpPath,"/Config/econet.cfg");
+
 	EcoCfg=fopen(TmpPath,"rt");
+
 	if (EcoCfg==NULL) {
 		sprintf(info, "Econet: Failed to open configuration file:\n  %s", TmpPath);
 		EconetError(info);

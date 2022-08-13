@@ -76,18 +76,30 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(DXSDK_DIR)\Include;$(IncludePath)</IncludePath>
+    <OutDir>..\</OutDir>
+    <TargetName>$(ProjectName)_$(PlatformArchitecture)_$(Configuration)</TargetName>
+    <IntDir>$(Configuration)\$(PlatformShortName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(DXSDK_DIR)\Include;$(IncludePath)</IncludePath>
+    <OutDir>..\</OutDir>
+    <TargetName>$(ProjectName)_$(PlatformArchitecture)_$(Configuration)</TargetName>
+    <IntDir>$(Configuration)\$(PlatformShortName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(DXSDK_DIR)\Include;$(IncludePath)</IncludePath>
+    <OutDir>..\</OutDir>
+    <TargetName>$(ProjectName)_$(PlatformArchitecture)_$(Configuration)</TargetName>
+    <IntDir>$(Configuration)\$(PlatformShortName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(DXSDK_DIR)\Include;$(IncludePath)</IncludePath>
+    <OutDir>..\</OutDir>
+    <TargetName>$(ProjectName)_$(PlatformArchitecture)_$(Configuration)</TargetName>
+    <IntDir>$(Configuration)\$(PlatformShortName)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -398,32 +410,6 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="BeebEm.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="..\DriveMotor.snd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\HeadLoad.snd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\HeadSeek.snd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\HeadStep.snd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\HeadUnload.snd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\RelayOff.snd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\RelayOn.snd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\Teletext.fnt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Help\65c02copro.html" />

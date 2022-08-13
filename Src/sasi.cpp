@@ -114,7 +114,7 @@ void SASIReset()
 
 	for (int i = 0; i < 1; ++i) // only one drive allowed under Torch Z80 ?
 	{
-		sprintf(buff, "%s\\sasi%d.dat", HardDrivePath, i);
+		sprintf(buff, "%s\\SASI\\sasi%d.dat", HardDrivePath, i);
 
 		if (SASIDisc[i] != NULL)
 		{
