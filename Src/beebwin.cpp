@@ -258,8 +258,8 @@ BeebWin::BeebWin()
 	m_CustomData = false;
 
 	// Set default files, may be overridden by command line parameters.
-	strcpy(m_PrefsFile, "Preferences.cfg");
-	strcpy(RomFile, "Roms.cfg");
+	strcpy(m_PrefsFile, "Config\\Preferences.cfg");
+	strcpy(RomFile, "Config\\Roms.cfg");
 }
 
 /****************************************************************************/
@@ -389,10 +389,10 @@ void BeebWin::ApplyPrefs()
 
 	// Load key maps
 	char keymap[_MAX_PATH];
-	strcpy(keymap, "Logical.kmap");
+	strcpy(keymap, "Keymaps/Logical.kmap");
 	GetDataPath(m_UserDataPath, keymap);
 	ReadKeyMap(keymap, &logicalMapping);
-	strcpy(keymap, "Default.kmap");
+	strcpy(keymap, "Keymaps/Default.kmap");
 	GetDataPath(m_UserDataPath, keymap);
 	ReadKeyMap(keymap, &defaultMapping);
 
@@ -537,6 +537,22 @@ void BeebWin::Shutdown()
 
 void BeebWin::ResetBeebSystem(Model NewModelType, bool LoadRoms)
 {
+	switch (NewModelType)
+	{
+	  case Model::B:
+		strcpy(m_szTitle, "BeebEm - BBC Model B");
+		break;
+	  case Model::IntegraB:
+		strcpy(m_szTitle, "BeebEm - BBC Model B + Integra-B");
+		break;
+	  case Model::BPlus:
+		strcpy(m_szTitle, "BeebEm - BBC Model B Plus");
+		break;
+	  case Model::Master128:
+		strcpy(m_szTitle, "BeebEm - BBC Master 128");
+		break;
+	}
+
 	SoundReset();
 	if (SoundDefault)
 		SoundInit();
@@ -551,19 +567,23 @@ void BeebWin::ResetBeebSystem(Model NewModelType, bool LoadRoms)
 	if (TubeType == Tube::Acorn65C02)
 	{
 		Init65C02core();
+		strcat(m_szTitle, " (6502 Tube)");
 	}
 	else if (TubeType == Tube::Master512CoPro)
 	{
 		master512CoPro.Reset();
+		strcat(m_szTitle, " (i86 Tube)");
 	}
 	else if (TubeType == Tube::TorchZ80 || TubeType == Tube::AcornZ80)
 	{
+		strcat(m_szTitle, " (Z80 Tube)");
 		R1Status = 0;
 		ResetTube();
 		init_z80();
 	}
 	else if (TubeType == Tube::AcornArm)
 	{
+		strcat(m_szTitle, " (ARM Tube)");
 		R1Status = 0;
 		ResetTube();
 		DestroyArmCoPro();
@@ -571,12 +591,14 @@ void BeebWin::ResetBeebSystem(Model NewModelType, bool LoadRoms)
 	}
 	else if (TubeType == Tube::SprowArm)
 	{
+		strcat(m_szTitle, " (ARM CoPro Tube)");
 		R1Status = 0;
 		ResetTube();
 		DestroySprowCoPro();
 		CreateSprowCoPro();
 	}
 
+	UpdateWindowTitle();
 	SysVIAReset();
 	UserVIAReset();
 	VideoInit();
@@ -1169,6 +1191,40 @@ void BeebWin::UpdateDisableKeysMenu() {
 	CheckMenuItem(IDM_DISABLEKEYSBREAK, m_DisableKeysBreak);
 	CheckMenuItem(IDM_DISABLEKEYSESCAPE, m_DisableKeysEscape);
 	CheckMenuItem(IDM_DISABLEKEYSSHORTCUT, m_DisableKeysShortcut);
+}
+
+static const char* pszReleaseCaptureMessage = "(Press Ctrl+Alt to release mouse)";
+
+void BeebWin::UpdateWindowTitle()
+{
+	char title[100];
+
+	if (m_EmuPaused)
+	{
+		if (m_ShowSpeedAndFPS)
+			sprintf(title, "%s  Speed: %2.2f  fps: %2d  Paused", m_szTitle, m_RelativeSpeed, (int)m_FramesPerSecond);
+		else
+			sprintf(title, "%s  Paused", m_szTitle);
+	}
+	else
+	{
+		if (m_MouseCaptured)
+		{
+			if (m_ShowSpeedAndFPS)
+				sprintf(title, "%s  Speed: %2.2f  fps: %2d %s", m_szTitle, m_RelativeSpeed, (int)m_FramesPerSecond, pszReleaseCaptureMessage);
+			else
+				sprintf(title, "%s %s", m_szTitle, pszReleaseCaptureMessage);
+		}
+		else
+		{
+			if (m_ShowSpeedAndFPS)
+				sprintf(title, "%s  Speed: %2.2f  fps: %2d", m_szTitle, m_RelativeSpeed, (int)m_FramesPerSecond);
+			else
+				sprintf(title, "%s", m_szTitle);
+		}
+	}
+
+	SetWindowText(m_hWnd, title);
 }
 
 /****************************************************************************/
@@ -3165,13 +3221,12 @@ void BeebWin::HandleCommand(int MenuId)
 		if (m_ShowSpeedAndFPS)
 		{
 			m_ShowSpeedAndFPS = false;
-			SetWindowText(m_hWnd, WindowTitle);
 		}
 		else
 		{
 			m_ShowSpeedAndFPS = true;
 		}
-
+		UpdateWindowTitle();
 		CheckMenuItem(IDM_SPEEDANDFPS, m_ShowSpeedAndFPS);
 		break;
 
@@ -4097,11 +4152,7 @@ void BeebWin::TogglePause()
 {
 	m_EmuPaused = !m_EmuPaused;
 	CheckMenuItem(IDM_EMUPAUSED, m_EmuPaused);
-	if (m_ShowSpeedAndFPS && m_EmuPaused)
-	{
-		sprintf(m_szTitle, "%s  Paused", WindowTitle);
-		SetWindowText(m_hWnd, m_szTitle);
-	}
+	UpdateWindowTitle();
 
 	if (m_EmuPaused)
 	{
@@ -4380,7 +4431,7 @@ void BeebWin::CheckForLocalPrefs(const char *path, bool bLoadPrefs)
 	_splitpath(path, drive, dir, NULL, NULL);
 
 	// Look for prefs file
-	_makepath(file, drive, dir, "Preferences", "cfg");
+	_makepath(file, drive, dir, "Config\\Preferences", "cfg");
 	fd = fopen(file, "r");
 	if (fd != NULL)
 	{
@@ -4403,7 +4454,7 @@ void BeebWin::CheckForLocalPrefs(const char *path, bool bLoadPrefs)
 	}
 
 	// Look for ROMs file
-	_makepath(file, drive, dir, "Roms", "cfg");
+	_makepath(file, drive, dir, "Config\\Roms", "cfg");
 	fd = fopen(file, "r");
 	if (fd != NULL)
 	{
@@ -5059,8 +5110,8 @@ void BeebWin::SelectUserDataPath()
 				StoreUserDataPath();
 
 				// Reset prefs and roms file paths
-				strcpy(m_PrefsFile, "Preferences.cfg");
-				strcpy(RomFile, "Roms.cfg");
+				strcpy(m_PrefsFile, "Config\\Preferences.cfg");
+				strcpy(RomFile, "Config\\Roms.cfg");
 				CheckForLocalPrefs(m_UserDataPath, true);
 
 				// Load and apply prefs

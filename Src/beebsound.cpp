@@ -316,7 +316,7 @@ void PlayUpTil(double DestTime)
 
 #ifdef SPEECH_ENABLED
 			// Mix in speech sound
-			if (SpeechEnabled) if (MachineType != 3) tmptotal += (SpeechBuf[SpeechPtr++]-128)*2;
+			if (SpeechEnabled) if (MachineType != Model::Master128) tmptotal += (SpeechBuf[SpeechPtr++]-128)*2;
 #endif
 
 			// Mix in sound samples here

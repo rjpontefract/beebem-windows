@@ -180,7 +180,7 @@ void TeletextInit()
         for (int i = 0; i < 4; i++)
         {
             char pathname[256];
-            sprintf(pathname, "%s/discims/txt%d.dat", mainWin->GetUserDataPath(), i);
+            sprintf(pathname, "%s/discims/Teletext/txt%d.dat", mainWin->GetUserDataPath(), i);
 
             TeletextFile[i] = fopen(pathname, "rb");
 

@@ -283,7 +283,7 @@ static unsigned char SlowDataBusRead() {
   }
 
 #ifdef SPEECH_ENABLED
-  if (!(IC32State & 2) && Model::Master128) {
+  if (!(IC32State & 2) && (MachineType != Model::Master128) ) {
     result = tms5220_status_r();
   }
 #endif

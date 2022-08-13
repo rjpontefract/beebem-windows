@@ -34,7 +34,8 @@ Boston, MA  02110-1301, USA.
 #include <string>
 
 #include <windows.h>
-#include <d3dx9.h>
+#include <d3d9.h>
+#include <DirectXMath.h>
 #include <ddraw.h>
 #include <sapi.h>
 
@@ -43,6 +44,8 @@ Boston, MA  02110-1301, USA.
 #include "port.h"
 #include "preferences.h"
 #include "video.h"
+
+using namespace DirectX;
 
 /* Used in message boxes */
 #define GETHWND (mainWin->GethWnd())
@@ -113,13 +116,13 @@ enum TextToSpeechSearchType
 // A structure for our custom vertex type. We added texture coordinates
 struct CUSTOMVERTEX
 {
-	D3DXVECTOR3 position; // The position
+	XMVECTOR position; // The position
 	D3DCOLOR	color;	  // The color
 	FLOAT		tu, tv;	  // The texture coordinates
 };
 
 // Our custom FVF, which describes our custom vertex structure
-#define D3DFVF_CUSTOMVERTEX (D3DFVF_XYZ|D3DFVF_DIFFUSE|D3DFVF_TEX1)
+#define D3DFVF_CUSTOMVERTEX (D3DFVF_XYZW|D3DFVF_DIFFUSE|D3DFVF_TEX1)
 
 enum class MessageType {
 	Error,
@@ -145,11 +148,14 @@ enum class PaletteType : char {
 	Last
 };
 
-class BeebWin {
+__declspec(align(16)) class BeebWin {
 
 public:
 	BeebWin();
 	~BeebWin();
+
+	void* operator new(size_t i) { return _mm_malloc(i, 16); }
+	void operator delete(void* p) { _mm_free(p); }
 
 	bool Initialise();
 	void ApplyPrefs();
@@ -468,7 +474,7 @@ public:
 	LPDIRECT3DDEVICE9       m_pd3dDevice;
 	LPDIRECT3DVERTEXBUFFER9 m_pVB;
 	LPDIRECT3DTEXTURE9      m_pTexture;
-	D3DXMATRIX              m_TextureMatrix;
+	XMMATRIX                m_TextureMatrix;
 
 	// Text to speech variables
 	ISpVoice *m_SpVoice;
