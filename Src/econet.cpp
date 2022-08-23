@@ -1001,7 +1001,7 @@ bool EconetPoll_real(void) { // return NMI status
 						} while (i < networkp);
 
 						// guess address if not found in table
-						if (!SendMe && confSTRICT) { // didn't find it and allowed to guess
+            if (!SendMe && !confSTRICT) { // didn't find it and allowed to guess
 							if (DebugEnabled) DebugDisplayTrace(DebugType::Econet, true, "Econet: Send to unknown host; make assumptions & add entry!");
 							if (BeebTx.eh.destnet == 0 || BeebTx.eh.destnet == aunnet[myaunnet].network) {
 								network[i].inet_addr = aunnet[myaunnet].inet_addr | (BeebTx.eh.deststn << 24);
