@@ -105,7 +105,7 @@ static const int CyclesTable6502[] = {
   2,5,1,8,4,4,6,6,2,4,2,7,4,4,7,7, /* 5 */
   6,6,1,8,3,3,5,5,4,2,2,2,5,4,6,6, /* 6 */
   2,5,1,8,4,4,6,6,2,4,2,7,4,4,7,7, /* 7 */
-  2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4, /* 8 */
+  2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,7, /* 8 */
   2,6,1,6,4,4,4,4,2,5,2,5,5,5,5,5, /* 9 */
   2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4, /* a */
   2,5,1,5,4,4,4,4,2,4,2,4,4,4,4,4, /* b */
@@ -125,7 +125,7 @@ static const int CyclesTable65C02[] = {
   2,5,5,1,4,4,6,1,2,4,3,1,8,4,6,1, /* 5 */
   6,6,2,1,3,3,5,1,4,2,2,1,6,4,6,1, /* 6 */
   2,5,5,1,4,4,6,1,2,4,4,1,6,4,6,1, /* 7 */
-  3,6,2,1,3,3,3,1,2,2,2,1,4,4,4,1, /* 8 */
+  2,6,2,1,3,3,3,1,2,2,2,1,4,4,4,1, /* 8 */
   2,6,5,1,4,4,4,1,2,5,2,1,4,5,5,1, /* 9 */
   2,6,2,1,3,3,3,1,2,2,2,1,4,4,4,1, /* a */
   2,5,5,1,4,4,4,1,2,4,2,1,4,4,4,1, /* b */
@@ -264,6 +264,17 @@ static unsigned int InstructionCount[256];
 
 static INLINE void Carried()
 {
+	if (MachineType == Model::Master128)
+	{
+		if (CurrentInstruction == 0x1e ||
+		    CurrentInstruction == 0x3e ||
+		    CurrentInstruction == 0x5e ||
+		    CurrentInstruction == 0x7e)
+		{
+			Cycles++;
+		}
+	}
+
 	if (((CurrentInstruction & 0xf) == 0x1 ||
 	     (CurrentInstruction & 0xf) == 0x9 ||
 	     (CurrentInstruction & 0xf) == 0xd) &&
@@ -275,6 +286,8 @@ static INLINE void Carried()
 	         CurrentInstruction == 0x3c ||
 	         CurrentInstruction == 0x5c ||
 	         CurrentInstruction == 0x7c ||
+	         CurrentInstruction == 0xb3 ||
+	         CurrentInstruction == 0xbb ||
 	         CurrentInstruction == 0xbc ||
 	         CurrentInstruction == 0xbe ||
 	         CurrentInstruction == 0xbf ||
@@ -464,6 +477,7 @@ INLINE static void ADCInstrHandler(int16 operand) {
     if (MachineType == Model::Master128) {
       ZFlag = Accumulator == 0;
       NFlag = Accumulator & 128;
+      Cycles++;
     }
 
     SetPSR(FlagC | FlagZ | FlagV | FlagN, CFlag, ZFlag, 0, 0, 0, VFlag, NFlag);
@@ -798,6 +812,8 @@ INLINE static void SBCInstrHandler(int16 operand) {
       int ZFlag = (Accumulator == 0);
 
       SetPSR(FlagC | FlagZ | FlagV | FlagN, CFlag, ZFlag, 0, 0, 0, VFlag, NFlag);
+
+      Cycles++;
     } else {
       /* Z flag determined from 2's compl result, not BCD result! */
       int TmpResult = Accumulator - operand - (1 - GETCFLAG);
@@ -2265,6 +2281,7 @@ void Exec6502Instruction(void) {
 				}
 				else {
 					// Undocumented instruction: SAX (zp,X)
+					AdvanceCyclesForMemWrite();
 					WritePaged(IndXAddrModeHandler_Address(), Accumulator & XReg);
 				}
 				break;
