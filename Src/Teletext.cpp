@@ -51,7 +51,7 @@ Control latch:
 #include <stdlib.h>
 #include <windows.h>
 
-#include "teletext.h"
+#include "Teletext.h"
 #include "debug.h"
 #include "6502core.h"
 #include "main.h"
@@ -67,10 +67,12 @@ bool TeletextFiles;
 bool TeletextLocalhost;
 bool TeletextCustom;
 
-char TeletextIP[4][20] = { "127.0.0.1", "127.0.0.1", "127.0.0.1", "127.0.0.1" };
-u_short TeletextPort[4] = { 19761, 19762, 19763, 19764 };
+char TeletextIP[4][20];
+u_short TeletextPort[4];
 char TeletextCustomIP[4][20];
 u_short TeletextCustomPort[4];
+
+constexpr int TELETEXT_BASE_PORT = 19761;
 
 enum TTXState {TTXFIELD, TTXFSYNC, TTXDEW};
 static TTXState TeletextState = TTXFIELD;
@@ -155,7 +157,10 @@ void TeletextInit()
     colPtr = 0x00;
 
     if (!TeletextAdapterEnabled)
+    {
+        ClearTrigger(TeletextAdapterTrigger);
         return;
+    }
 
     TeletextClose();
 
@@ -165,6 +170,11 @@ void TeletextInit()
         {
             strcpy(TeletextIP[i], TeletextCustomIP[i]);
             TeletextPort[i] = TeletextCustomPort[i];
+        }
+        else
+        {
+            strcpy(TeletextIP[i], "127.0.0.1");
+            TeletextPort[i] = TELETEXT_BASE_PORT + i;
         }
     }
 
@@ -196,6 +206,8 @@ void TeletextInit()
     }
 
     TeletextState = TTXFIELD; // within a field
+
+    SetTrigger(128, TeletextAdapterTrigger); // wait for approximately 1 video line
 }
 
 void TeletextClose()
@@ -317,7 +329,6 @@ void TeletextAdapterUpdate()
 {
     if (!TeletextAdapterEnabled)
     {
-        ClearTrigger(TeletextAdapterTrigger);
         return;
     }
 

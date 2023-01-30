@@ -46,7 +46,8 @@ enum class DebugType {
 	RemoteServer,
 	Manual,
 	Breakpoint,
-	BRK
+	CMOS,
+	BRK,
 };
 
 //*******************************************************************
@@ -70,7 +71,7 @@ struct Breakpoint
 {
 	int start;
 	int end;
-	char name[50 + 1];
+	std::string name;
 };
 
 struct Watch
@@ -79,7 +80,7 @@ struct Watch
 	char type;
 	int value;
 	bool host;
-	char name[50 + 1];
+	std::string name;
 };
 
 struct InstInfo
@@ -93,13 +94,7 @@ struct AddrInfo
 {
 	int start;
 	int end;
-	char desc[100];
-};
-
-struct MemoryMap
-{
-	AddrInfo* entries;
-	int count;
+	std::string desc;
 };
 
 struct DebugCmd
@@ -116,15 +111,15 @@ bool DebugDisassembler(int addr,
                        int Accumulator,
                        int XReg,
                        int YReg,
-                       int PSR,
-                       int StackReg,
+                       unsigned char PSR,
+                       unsigned char StackReg,
                        bool host);
 int DebugDisassembleInstruction(int addr, bool host, char *opstr);
 int DebugDisassembleInstructionWithCPUStatus(int addr,
                                              bool host,
-                                             unsigned char Accumulator,
-                                             unsigned char XReg,
-                                             unsigned char YReg,
+                                             int Accumulator,
+                                             int XReg,
+                                             int YReg,
                                              unsigned char StackReg,
                                              unsigned char PSR,
                                              char *opstr);

@@ -57,10 +57,8 @@ Boston, MA  02110-1301, USA.
 #include "z80.h"
 #include "econet.h"		//Rob
 #include "debug.h"		//Rob added for INTON/OFF reporting only
-#include "teletext.h"
+#include "Teletext.h"
 #include "music5000.h"
-
-using namespace std;
 
 unsigned char WholeRam[65536];
 unsigned char Roms[16][16384];
@@ -123,13 +121,12 @@ static const unsigned char HiddenDefault[31] = {
 /* Master 128 Specific Stuff */
 unsigned char FSRam[8192];       // 8K Filing System RAM
 unsigned char PrivateRAM[4096];  // 4K Private RAM (VDU Use mainly)
-unsigned char CMOSRAM[64];       // 50 Bytes CMOS RAM
-unsigned char CMOSDefault[64]={0,0,0,0,0,0xc9,0xff,0xfe,0x32,0,7,0xc1,0x1e,5,0,0x59,0xa2}; // Backup of CMOS Defaults
 unsigned char ShadowRAM[32768];  // 20K Shadow RAM
 unsigned char ACCCON;            // ACCess CONtrol register
-struct CMOSType CMOS;
+
 bool Sh_Display;
-static bool PRAM, FRAM;
+static bool PrivateRAMSelect;
+static bool FSRAMSelect;
 static bool Sh_CPUX, Sh_CPUE;
 /* End of Master 128 Specific Stuff, note initilised anyway regardless of Model Type in use */
 
@@ -365,7 +362,7 @@ unsigned char BeebReadMem(int Address) {
 			}
 			break;
 		case 8:
-			if (PRAM) {
+			if (PrivateRAMSelect) {
 				return(PrivateRAM[Address-0x8000]);
 			} else {
 				return(Roms[ROMSEL][Address-0x8000]);
@@ -378,7 +375,14 @@ unsigned char BeebReadMem(int Address) {
 			break;
 		case 0xc:
 		case 0xd:
-			if (FRAM) return(FSRam[Address-0xc000]); else return(WholeRam[Address]);
+			if (FSRAMSelect)
+			{
+				return FSRam[Address - 0xc000];
+			}
+			else
+			{
+				return WholeRam[Address];
+			}
 			break;
 		case 0xe:
 			return(WholeRam[Address]);
@@ -393,9 +397,6 @@ unsigned char BeebReadMem(int Address) {
 			return(0);
 		}
 	}
-
-	if (Address>=0xff00)
-		return(WholeRam[Address]);
 
 	/* IO space */
 
@@ -633,7 +634,7 @@ static void DoRomChange(unsigned char NewBank)
   // Master Specific stuff
   if (MachineType == Model::Master128) {
     PagedRomReg = NewBank;
-    PRAM = (PagedRomReg & 128) != 0;
+    PrivateRAMSelect = (PagedRomReg & 0x80) != 0;
   }
 }
 
@@ -650,7 +651,7 @@ static void FiddleACCCON(unsigned char newValue) {
 	if (Sh_Display != oldshd) RedoMPTR();
 	Sh_CPUX = (ACCCON & 4) != 0;
 	Sh_CPUE = (ACCCON & 2) != 0;
-	FRAM = (ACCCON & 8) != 0;
+	FSRAMSelect = (ACCCON & 8) != 0;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -818,7 +819,10 @@ void BeebWriteMem(int Address, unsigned char Value) {
 				}
 				break;
 			case 8:
-				if (PRAM) { PrivateRAM[Address-0x8000]=Value; }
+				if (PrivateRAMSelect)
+				{
+					PrivateRAM[Address - 0x8000] = Value;
+				}
 				else {
 					if (RomWritable[ROMSEL]) Roms[ROMSEL][Address-0x8000]=Value;
 					//else RomWriteThrough(Address, Value); //Not supported on Master
@@ -832,7 +836,10 @@ void BeebWriteMem(int Address, unsigned char Value) {
 				break;
 			case 0xc:
 			case 0xd:
-				if (FRAM) FSRam[Address-0xc000]=Value;
+				if (FSRAMSelect)
+				{
+					FSRam[Address - 0xc000] = Value;
+				}
 				break;
 			}
 			return;
@@ -924,7 +931,6 @@ void BeebWriteMem(int Address, unsigned char Value) {
 	}
 
 	// In the Master at least, ROMSEL/ACCCON seem to be duplicated over a 4 byte block.
-	/*cerr << "Write *0x" << hex << Address << "=0x" << Value << dec << "\n"; */
 	if (Address >= 0xfe34 && Address < 0xfe38 && MachineType == Model::Master128) {
 		FiddleACCCON(Value);
 		return;
@@ -990,33 +996,73 @@ void BeebWriteMem(int Address, unsigned char Value) {
 	}
 }
 
+static bool IsValidROMString(const unsigned char* s)
+{
+	int Count = 0;
+	int Total = 0;
+
+	for (; *s != '\0'; s++)
+	{
+		Count += isprint(*s) ? 1 : 0;
+		Total++;
+	}
+
+	if (Total == 0)
+	{
+		return true;
+	}
+	else
+	{
+		return ((double)Count / (double)Total) > 0.5;
+	}
+}
+
 bool ReadRomInfo(int bank, RomInfo* info)
 {
 	if((RomFlags)Roms[bank][6] == 0)
 		return false;
+
+	info->Slot = bank;
+
 	// LanguageAddr and ServiceAddr are really 6502 instructions. Most ROMs obey the JMP convention as
 	// described in the AUG, however BASIC fills the first 6 bytes with CMP 1; BEQ 1F; RTS; NOP
 	// which seems to simply be a check for whether it was entered properly.
-	info->Slot = bank;
 	info->ServiceAddr = info->LanguageAddr = info->RelocationAddr = 0;
 	if(Roms[bank][0] == 0x4C)
 		info->LanguageAddr = (Roms[bank][2] << 8) | Roms[bank][1];
 	if(Roms[bank][3] == 0x4C)
 		info->ServiceAddr = (Roms[bank][5] << 8) | Roms[bank][4];
+
 	// TODO: Flags0-3 specify instruction type, see master reference manual part 1 p257.
 	info->Flags = (RomFlags)Roms[bank][6];
+
 	info->VersionStr[0] = '\0';
 	info->Version = Roms[bank][8];
-	strncpy(info->Title, (char*)&Roms[bank][9], 256);
-	if(strlen(info->Title) + 9 != Roms[bank][7])
-		strncpy(info->VersionStr, (char*)&Roms[bank][strlen(info->Title) + 10], 256);
-	strncpy(info->Copyright, (char*)(Roms[bank] + Roms[bank][7] + 1), 256);
-	if(info->Flags & RomRelocate)
+
+	strncpy(info->Title, (char*)&Roms[bank][9], MAX_ROMINFO_LENGTH);
+	info->Title[MAX_ROMINFO_LENGTH] = '\0';
+
+	if (!IsValidROMString((unsigned char*)info->Title))
+	{
+		return false;
+	}
+
+	if (strlen(info->Title) + 9 != Roms[bank][7])
+	{
+		strncpy(info->VersionStr, (char*)&Roms[bank][strlen(info->Title) + 10], MAX_ROMINFO_LENGTH);
+		info->VersionStr[MAX_ROMINFO_LENGTH] = '\0';
+	}
+
+	strncpy(info->Copyright, (char*)(Roms[bank] + Roms[bank][7] + 1), MAX_ROMINFO_LENGTH);
+	info->Copyright[MAX_ROMINFO_LENGTH] = '\0';
+
+	if (info->Flags & RomRelocate)
 	{
 		int addr = Roms[bank][7] + (int)strlen(info->Copyright) + 2;
 		info->RelocationAddr = (Roms[bank][addr + 3] << 24) | (Roms[bank][addr + 2] << 16) | (Roms[bank][addr + 1] << 8) | Roms[bank][addr];
 	}
-	if(!(info->Flags & RomService))
+
+	if (!(info->Flags & RomService))
 	{
 		// BASIC:
 		info->LanguageAddr = 0x8000;
@@ -1216,8 +1262,8 @@ void BeebMemInit(bool LoadRoms, bool SkipIntegraBConfig) {
   memset(PrivateRAM,0,0x1000);
   ACCCON = 0;
   Sh_Display = false;
-  FRAM = false;
-  PRAM = false;
+  FSRAMSelect = false;
+  PrivateRAMSelect = false;
   Sh_CPUE = false;
   Sh_CPUX = false;
   memset(Private,0,0x3000);
@@ -1365,11 +1411,11 @@ void LoadRomRegsUEF(FILE *SUEF) {
 		break;
 
 	case Model::Master128:
-		PRAM = (PagedRomReg & 0x80) != 0;
+		PrivateRAMSelect = (PagedRomReg & 0x80) != 0;
 		Sh_Display = (ACCCON & 1) != 0;
 		Sh_CPUX = (ACCCON & 4) != 0;
 		Sh_CPUE = (ACCCON & 2) != 0;
-		FRAM = (ACCCON & 8) != 0;
+		FSRAMSelect = (ACCCON & 8) != 0;
 		break;
 	}
 }

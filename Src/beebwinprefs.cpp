@@ -47,14 +47,13 @@ Boston, MA  02110-1301, USA.
 #ifdef SPEECH_ENABLED
 #include "speech.h"
 #endif
-#include "teletext.h"
+#include "Teletext.h"
 #include "serialdevices.h"
 #include "Arm.h"
 #include "SprowCoPro.h"
 
 /* Configuration file strings */
 static const char *CFG_VIEW_WIN_SIZE = "WinSize";
-static const char *CFG_VIEW_SHOW_FPS = "ShowFSP";
 static const char *CFG_VIEW_MONITOR = "Monitor";
 static const char *CFG_SOUND_SAMPLE_RATE = "SampleRate";
 static const char *CFG_SOUND_VOLUME = "SoundVolume";
@@ -79,8 +78,6 @@ static const char *CFG_TUBE_TYPE = "TubeType";
 #define LED_COLOUR_TYPE (LEDByte&4)>>2
 #define LED_SHOW_KB (LEDByte&1)
 #define LED_SHOW_DISC (LEDByte&2)>>1
-
-extern unsigned char CMOSDefault[64];
 
 void BeebWin::LoadPreferences()
 {
@@ -109,6 +106,7 @@ void BeebWin::LoadPreferences()
 	m_Preferences.EraseValue("ShowBottomCursorLine");
 	m_Preferences.EraseValue("Volume");
 	m_Preferences.EraseValue("UsePrimaryBuffer");
+	m_Preferences.EraseValue("ShowFSP");
 
 	MachineType = Model::B;
 
@@ -166,8 +164,14 @@ void BeebWin::LoadPreferences()
 	if (!m_Preferences.GetBoolValue("MaintainAspectRatio", m_MaintainAspectRatio))
 		m_MaintainAspectRatio = true;
 
-	if (!m_Preferences.GetBoolValue(CFG_VIEW_SHOW_FPS, m_ShowSpeedAndFPS))
-		m_ShowSpeedAndFPS = true;
+	if (!m_Preferences.GetBoolValue("ShowFPS", m_ShowSpeedAndFPS))
+	{
+		// This option was named "ShowFSP" in BeebEm v4.18 and earlier
+		if (!m_Preferences.GetBoolValue("ShowFSP", m_ShowSpeedAndFPS))
+		{
+			m_ShowSpeedAndFPS = true;
+		}
+	}
 
 	m_PaletteType = PaletteType::RGB;
 
@@ -393,7 +397,7 @@ void BeebWin::LoadPreferences()
 	if (!m_Preferences.GetBinaryValue("SWRAMWritable", RomWritePrefs, 16))
 	{
 		for (int slot = 0; slot < 16; ++slot)
-			RomWritePrefs[slot] = 1;
+			RomWritePrefs[slot] = true;
 	}
 
 	if (!m_Preferences.GetBoolValue("SWRAMBoard", SWRAMBoardEnabled))
@@ -485,9 +489,6 @@ void BeebWin::LoadPreferences()
 
 	if (!m_Preferences.GetBoolValue("RTCEnabled", RTC_Enabled))
 		RTC_Enabled = false;
-
-	if (!m_Preferences.GetBoolValue("RTCY2KAdjust", RTCY2KAdjust))
-		RTCY2KAdjust = true;
 
 	if (m_Preferences.GetDWORDValue("CaptureResolution", dword))
 		m_MenuIdAviResolution = dword;
@@ -618,7 +619,7 @@ void BeebWin::SavePreferences(bool saveAll)
 		m_Preferences.SetDWORDValue("WinSizeY", m_YLastWinSize);
 		m_Preferences.SetBoolValue("FullScreen", m_isFullScreen);
 		m_Preferences.SetBoolValue("MaintainAspectRatio", m_MaintainAspectRatio);
-		m_Preferences.SetBoolValue(CFG_VIEW_SHOW_FPS, m_ShowSpeedAndFPS);
+		m_Preferences.SetBoolValue("ShowFPS", m_ShowSpeedAndFPS);
 		m_Preferences.SetBinaryValue(CFG_VIEW_MONITOR, &m_PaletteType, 1);
 		m_Preferences.SetBoolValue("HideMenuEnabled", m_HideMenuEnabled);
 		LEDByte = static_cast<unsigned char>(
@@ -721,7 +722,6 @@ void BeebWin::SavePreferences(bool saveAll)
 		m_Preferences.SetBoolValue("SCSIDriveEnabled", SCSIDriveEnabled);
 		m_Preferences.SetBoolValue("IDEDriveEnabled", IDEDriveEnabled);
 		m_Preferences.SetBoolValue("RTCEnabled", RTC_Enabled);
-		m_Preferences.SetBoolValue("RTCY2KAdjust", RTCY2KAdjust);
 
 		m_Preferences.SetDWORDValue("CaptureResolution", m_MenuIdAviResolution);
 		m_Preferences.SetDWORDValue("FrameSkip", m_MenuIdAviSkip);

@@ -82,7 +82,7 @@ using std::max;
 #ifdef SPEECH_ENABLED
 #include "speech.h"
 #endif
-#include "teletext.h"
+#include "Teletext.h"
 #include "avi.h"
 #include "csw.h"
 #include "serialdevices.h"
@@ -191,8 +191,6 @@ BeebWin::BeebWin()
 	m_AutoSavePrefsFolders = false;
 	m_AutoSavePrefsAll = false;
 	m_AutoSavePrefsChanged = false;
-	memset(m_KbdCmd, 0, sizeof(m_KbdCmd));
-	memset(m_DebugScript, 0, sizeof(m_DebugScript));
 	m_KbdCmdPos = -1;
 	m_KbdCmdPress = false;
 	m_KbdCmdDelay = 40;
@@ -329,10 +327,10 @@ bool BeebWin::Initialise()
 	ReadROMFile(RomFile, RomConfig);
 	ApplyPrefs();
 
-	if (m_DebugScript[0] != '\0')
+	if (!m_DebugScriptFileName.empty())
 	{
 		DebugOpenDialog(hInst, m_hWnd);
-		DebugRunScript(m_DebugScript);
+		DebugRunScript(m_DebugScriptFileName.c_str());
 	}
 
 	if (!m_DebugLabelsFileName.empty())
@@ -831,6 +829,7 @@ void BeebWin::CreateBeebWindow(void)
 
 	int x = m_XWinPos;
 	int y = m_YWinPos;
+
 	if (x == -1 || y == -1)
 	{
 		x = CW_USEDEFAULT;
@@ -925,9 +924,9 @@ void BeebWin::InitMenu(void)
 	CheckMenuItem(m_MenuIdAviSkip, true);
 
 	// File -> Disc Options
-	CheckMenuItem(IDM_WPDISC0, m_WriteProtectDisc[0]);
-	CheckMenuItem(IDM_WPDISC1, m_WriteProtectDisc[1]);
-	CheckMenuItem(IDM_WPONLOAD, m_WriteProtectOnLoad);
+	CheckMenuItem(IDM_WRITE_PROTECT_DISC0, m_WriteProtectDisc[0]);
+	CheckMenuItem(IDM_WRITE_PROTECT_DISC1, m_WriteProtectDisc[1]);
+	CheckMenuItem(IDM_WRITE_PROTECT_ON_LOAD, m_WriteProtectOnLoad);
 
 	// File -> Capture Options
 	CheckMenuItem(IDM_CAPTURERES_DISPLAY, false);
@@ -1113,8 +1112,7 @@ void BeebWin::InitMenu(void)
 	CheckMenuItem(ID_FLOPPYDRIVE, Disc8271Enabled);
 	CheckMenuItem(ID_HARDDRIVE, SCSIDriveEnabled);
 	CheckMenuItem(ID_IDEDRIVE, IDEDriveEnabled);
-	CheckMenuItem(ID_UPRM, RTC_Enabled);
-	CheckMenuItem(ID_RTCY2KADJUST, RTCY2KAdjust);
+	CheckMenuItem(ID_USER_PORT_RTC_MODULE, RTC_Enabled);
 
 	// Options
 	CheckMenuItem(IDM_JOYSTICK, false);
@@ -1425,7 +1423,7 @@ LRESULT CALLBACK WndProc(HWND hWnd,     // window handle
 	switch (message)
 	{
 		case WM_COMMAND:  // message: command from application menu
-			wmId	= LOWORD(wParam);
+			wmId = LOWORD(wParam);
 			wmEvent = HIWORD(wParam);
 			mainWin->HandleCommand(wmId);
 			break;
@@ -1684,6 +1682,7 @@ LRESULT CALLBACK WndProc(HWND hWnd,     // window handle
 
 		case WM_ACTIVATE:
 			mainWin->Activate(wParam != WA_INACTIVE);
+
 			if (wParam != WA_INACTIVE)
 			{
 				// Bring debug window to foreground BEHIND main window.
@@ -2418,22 +2417,24 @@ void BeebWin::TranslateTiming(void)
 
 void BeebWin::AdjustSpeed(bool up)
 {
-	static int speeds[] = {
-				IDM_FIXEDSPEED100,
-				IDM_FIXEDSPEED50,
-				IDM_FIXEDSPEED10,
-				IDM_FIXEDSPEED5,
-				IDM_FIXEDSPEED2,
-				IDM_FIXEDSPEED1_5,
-				IDM_FIXEDSPEED1_25,
-				IDM_FIXEDSPEED1_1,
-				IDM_REALTIME,
-				IDM_FIXEDSPEED0_9,
-				IDM_FIXEDSPEED0_75,
-				IDM_FIXEDSPEED0_5,
-				IDM_FIXEDSPEED0_25,
-				IDM_FIXEDSPEED0_1,
-				0};
+	static const int speeds[] = {
+		IDM_FIXEDSPEED100,
+		IDM_FIXEDSPEED50,
+		IDM_FIXEDSPEED10,
+		IDM_FIXEDSPEED5,
+		IDM_FIXEDSPEED2,
+		IDM_FIXEDSPEED1_5,
+		IDM_FIXEDSPEED1_25,
+		IDM_FIXEDSPEED1_1,
+		IDM_REALTIME,
+		IDM_FIXEDSPEED0_9,
+		IDM_FIXEDSPEED0_75,
+		IDM_FIXEDSPEED0_5,
+		IDM_FIXEDSPEED0_25,
+		IDM_FIXEDSPEED0_1,
+		0
+	};
+
 	int s = 0;
 	int t = m_MenuIdTiming;
 
@@ -2602,10 +2603,13 @@ void BeebWin::SetWindowAttributes(bool wasFullScreen)
 		style |= WIN_STYLE;
 		SetWindowLong(m_hWnd, GWL_STYLE, style);
 
-		SetWindowPos(m_hWnd, HWND_TOP, m_XWinPos, m_YWinPos,
-					 m_XWinSize + m_XWinBorder,
-					 m_YWinSize + m_YWinBorder,
-					 !wasFullScreen ? SWP_NOMOVE : 0);
+		SetWindowPos(m_hWnd,
+		             HWND_TOP,
+		             m_XWinPos,
+		             m_YWinPos,
+		             m_XWinSize + m_XWinBorder,
+		             m_YWinSize + m_YWinBorder,
+		             !wasFullScreen ? SWP_NOMOVE : 0);
 
 		// Experiment: hide menu in full screen
 		HideMenu(false);
@@ -2809,17 +2813,17 @@ void BeebWin::HandleCommand(int MenuId)
 		EjectDiscImage(1);
 		break;
 
-	case IDM_WPDISC0:
+	case IDM_WRITE_PROTECT_DISC0:
 		ToggleWriteProtect(0);
 		break;
 
-	case IDM_WPDISC1:
+	case IDM_WRITE_PROTECT_DISC1:
 		ToggleWriteProtect(1);
 		break;
 
-	case IDM_WPONLOAD:
+	case IDM_WRITE_PROTECT_ON_LOAD:
 		m_WriteProtectOnLoad = !m_WriteProtectOnLoad;
-		CheckMenuItem(IDM_WPONLOAD, m_WriteProtectOnLoad);
+		CheckMenuItem(IDM_WRITE_PROTECT_ON_LOAD, m_WriteProtectOnLoad);
 		break;
 
 	case IDM_EDIT_COPY:
@@ -3498,7 +3502,7 @@ void BeebWin::HandleCommand(int MenuId)
 	case IDM_VIEWREADME:
 		strcpy(TmpPath, m_AppPath);
 		strcat(TmpPath, "Help\\index.html");
-		ShellExecute(m_hWnd, NULL, TmpPath, NULL, NULL, SW_SHOWNORMAL);;
+		ShellExecute(m_hWnd, NULL, TmpPath, NULL, NULL, SW_SHOWNORMAL);
 		break;
 
 	case IDM_EXIT:
@@ -3804,9 +3808,9 @@ void BeebWin::HandleCommand(int MenuId)
 		}
 		break;
 
-	case ID_UPRM:
+	case ID_USER_PORT_RTC_MODULE:
 		RTC_Enabled = !RTC_Enabled;
-		CheckMenuItem(ID_UPRM, RTC_Enabled);
+		CheckMenuItem(ID_USER_PORT_RTC_MODULE, RTC_Enabled);
 		break;
 
 	case ID_TELETEXTHALFMODE:
@@ -3875,8 +3879,10 @@ void BeebWin::HandleCommand(int MenuId)
 	case IDM_CAPTURESCREEN:
 		// Prompt for file name.  Need to do this in WndProc otherwise
 		// dialog does not show in full screen mode.
-		if (GetImageFile(m_CaptureFileName))
+		if (GetImageFile(m_CaptureFileName, sizeof(m_CaptureFileName)))
+		{
 			CaptureBitmapPending(false);
+		}
 		break;
 
 	case IDM_VIDEORES1:
@@ -4011,12 +4017,6 @@ void BeebWin::HandleCommand(int MenuId)
 		Disc8271Enabled = !Disc8271Enabled;
 		Disc1770Enabled = !Disc1770Enabled;
 		CheckMenuItem(ID_FLOPPYDRIVE, Disc8271Enabled);
-		break;
-
-	case ID_RTCY2KADJUST:
-		RTCY2KAdjust = !RTCY2KAdjust;
-		RTCInit();
-		CheckMenuItem(ID_RTCY2KADJUST, RTCY2KAdjust);
 		break;
 
 	case IDM_TEXTTOSPEECH:
@@ -4284,8 +4284,8 @@ void BeebWin::ParseCommandLine()
 {
 	bool invalid;
 
-	m_CommandLineFileName1[0] = 0;
-	m_CommandLineFileName2[0] = 0;
+	m_CommandLineFileName1[0] = '\0';
+	m_CommandLineFileName2[0] = '\0';
 
 	int i = 1;
 
@@ -4372,11 +4372,11 @@ void BeebWin::ParseCommandLine()
 			}
 			else if (_stricmp(__argv[i], "-KbdCmd") == 0)
 			{
-				strncpy(m_KbdCmd, __argv[++i], sizeof(m_KbdCmd));
+				m_KbdCmd = __argv[++i];
 			}
 			else if (_stricmp(__argv[i], "-DebugScript") == 0)
 			{
-				strncpy(m_DebugScript, __argv[++i], sizeof(m_DebugScript));
+				m_DebugScriptFileName = __argv[++i];
 			}
 			else if (_stricmp(__argv[i], "-DebugLabels") == 0)
 			{
@@ -4399,10 +4399,14 @@ void BeebWin::ParseCommandLine()
 			else
 			{
 				// Assume it's a file name
-				if (m_CommandLineFileName1[0] == 0)
+				if (m_CommandLineFileName1[0] == '\0')
+				{
 					strncpy(m_CommandLineFileName1, __argv[i], _MAX_PATH);
-				else if (m_CommandLineFileName2[0] == 0)
+				}
+				else if (m_CommandLineFileName2[0] == '\0')
+				{
 					strncpy(m_CommandLineFileName2, __argv[i], _MAX_PATH);
+				}
 			}
 
 			if (invalid)
@@ -4490,7 +4494,7 @@ void BeebWin::FindCommandLineFile(char *CmdLineFile)
 		FileName = CmdLineFile;
 		strncpy(TmpPath, CmdLineFile, _MAX_PATH);
 
-		// Work out which type of files it is
+		// Work out which type of file it is
 		const char *ext = strrchr(FileName, '.');
 		if (ext != NULL)
 		{
@@ -4606,7 +4610,7 @@ void BeebWin::FindCommandLineFile(char *CmdLineFile)
 /*****************************************************************************/
 // Handle a file name passed on command line
 
-void BeebWin::HandleCommandLineFile(int drive, const char *CmdLineFile)
+void BeebWin::HandleCommandLineFile(int Drive, const char *CmdLineFile)
 {
 	bool ssd = false;
 	bool dsd = false;
@@ -4708,46 +4712,50 @@ void BeebWin::HandleCommandLineFile(int drive, const char *CmdLineFile)
 			if (dsd)
 			{
 				if (NativeFDC)
-					LoadSimpleDSDiscImage(FileName, drive, 80);
+					LoadSimpleDSDiscImage(FileName, Drive, 80);
 				else
-					Load1770DiscImage(FileName, drive, DiscType::DSD);
+					Load1770DiscImage(FileName, Drive, DiscType::DSD);
 			}
 			else if (ssd)
 			{
 				if (NativeFDC)
-					LoadSimpleDiscImage(FileName, drive, 0, 80);
+					LoadSimpleDiscImage(FileName, Drive, 0, 80);
 				else
-					Load1770DiscImage(FileName, drive, DiscType::SSD);
+					Load1770DiscImage(FileName, Drive, DiscType::SSD);
 			}
 			else if (adfs)
 			{
 				if (!NativeFDC)
-					Load1770DiscImage(FileName, drive, DiscType::ADFS);
+					Load1770DiscImage(FileName, Drive, DiscType::ADFS);
 				else
 					cont = false;  // cannot load adfs with native DFS
 			}
 			else if (img)
 			{
 				if (NativeFDC)
-					LoadSimpleDiscImage(FileName, drive, 0, 80); // Treat like an ssd
+					LoadSimpleDiscImage(FileName, Drive, 0, 80); // Treat like an ssd
 				else
-					Load1770DiscImage(FileName, drive, DiscType::IMG);
+					Load1770DiscImage(FileName, Drive, DiscType::IMG);
 			}
 		}
 		else // Model::Master128
 		{
 			if (dsd)
-				Load1770DiscImage(FileName, drive, DiscType::DSD);
+				Load1770DiscImage(FileName, Drive, DiscType::DSD);
 			else if (ssd)
-				Load1770DiscImage(FileName, drive, DiscType::SSD);
+				Load1770DiscImage(FileName, Drive, DiscType::SSD);
 			else if (adfs)
-				Load1770DiscImage(FileName, drive, DiscType::ADFS);
+				Load1770DiscImage(FileName, Drive, DiscType::ADFS);
 			else if (img)
-				Load1770DiscImage(FileName, drive, DiscType::IMG);
+				Load1770DiscImage(FileName, Drive, DiscType::IMG);
 		}
+
+		// Write protect the disc
+		if (m_WriteProtectOnLoad != m_WriteProtectDisc[Drive])
+			ToggleWriteProtect(Drive);
 	}
 
-	if (cont && !m_NoAutoBoot && drive == 0)
+	if (cont && !m_NoAutoBoot && Drive == 0)
 	{
 		m_AutoBootDisc = true;
 
@@ -4768,7 +4776,7 @@ void BeebWin::DoShiftBreak()
 
 bool BeebWin::HasKbdCmd() const
 {
-	return m_KbdCmd[0] != '\0';
+	return !m_KbdCmd.empty();
 }
 
 void BeebWin::SetKeyboardTimer()
@@ -5153,6 +5161,7 @@ void BeebWin::HandleTimer()
 	else
 	{
 		m_KbdCmdPos++;
+
 		if (m_KbdCmd[m_KbdCmdPos] == 0)
 		{
 			KillTimer(m_hWnd, 1);
@@ -5165,6 +5174,7 @@ void BeebWin::HandleTimer()
 			{
 			case '\\':
 				m_KbdCmdPos++;
+
 				switch (m_KbdCmd[m_KbdCmdPos])
 				{
 				case '\\': m_KbdCmdKey = VK_OEM_5; break;

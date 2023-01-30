@@ -263,15 +263,15 @@ public:
 	void ParseCommandLine(void);
 	void CheckForLocalPrefs(const char *path, bool bLoadPrefs);
 	void FindCommandLineFile(char *CmdLineFile);
-	void HandleCommandLineFile(int drive, const char *CmdLineFile);
+	void HandleCommandLineFile(int Drive, const char *CmdLineFile);
 	void HandleEnvironmentVariables();
 	void LoadStartupDisc(int DriveNum, const char *DiscString);
 	bool CheckUserDataPath(bool Persist);
 	void SelectUserDataPath(void);
 	void StoreUserDataPath(void);
-	bool NewTapeImage(char *FileName);
-	const char *GetAppPath(void) { return m_AppPath; }
-	const char *GetUserDataPath(void) { return m_UserDataPath; }
+	bool NewTapeImage(char *FileName, int Size);
+	const char *GetAppPath() const { return m_AppPath; }
+	const char *GetUserDataPath() const { return m_UserDataPath; }
 	void GetDataPath(const char *folder, char *path);
 	void QuickLoad();
 	void QuickSave();
@@ -417,8 +417,8 @@ public:
 	char 		m_BlurIntensities[8];
 	char 		m_CommandLineFileName1[_MAX_PATH];
 	char 		m_CommandLineFileName2[_MAX_PATH];
-	char		m_KbdCmd[1024];
-	char		m_DebugScript[_MAX_PATH];
+	std::string m_KbdCmd;
+	std::string m_DebugScriptFileName;
 	std::string m_DebugLabelsFileName;
 	int		m_KbdCmdPos;
 	int		m_KbdCmdKey;
@@ -433,7 +433,7 @@ public:
 	bool		m_AutoBootDisc;
 	bool		m_KeyboardTimerElapsed;
 	bool		m_BootDiscTimerElapsed;
-	unsigned char RomWritePrefs[16];
+	bool RomWritePrefs[16];
 
 	// Bitmap capture vars
 	ULONG_PTR	m_gdiplusToken;
@@ -489,6 +489,7 @@ public:
 	static const int MAX_SPEECH_BUF_LEN = 160;
 	char m_SpeechBuf[MAX_SPEECH_BUF_LEN+1];
 	int m_SpeechBufPos;
+	int m_SpeechRate;
 
 	// Text view variables
 	HWND m_hTextView;
@@ -515,21 +516,21 @@ public:
 	void EnableMenuItem(UINT id, bool enabled);
 
 	// DirectX - calls DDraw or DX9 fn
-	void InitDX(void);
-	void ResetDX(void);
-	void ReinitDX(void);
-	void ExitDX(void);
-	void UpdateSmoothing(void);
+	void InitDX();
+	void ResetDX();
+	void ReinitDX();
+	void ExitDX();
+	void UpdateSmoothing();
 
 	// DirectDraw
-	HRESULT InitDirectDraw(void);
-	HRESULT InitSurfaces(void);
-	void ResetSurfaces(void);
+	HRESULT InitDirectDraw();
+	HRESULT InitSurfaces();
+	void ResetSurfaces();
 
 	// DirectX9
-	HRESULT InitDX9(void);
-	void ExitDX9(void);
-	void RenderDX9(void);
+	HRESULT InitDX9();
+	void ExitDX9();
+	void RenderDX9();
 
 	void TranslateWindowSize(void);
 	void TranslateDDSize(void);
@@ -564,18 +565,18 @@ public:
 	                   int SourceWidth,
 	                   int SourceHeight,
 	                   bool Teletext);
-	bool GetImageFile(char *FileName);
+	bool GetImageFile(char *FileName, int Size);
 	bool GetImageEncoderClsid(const WCHAR *mimeType, CLSID *encoderClsid);
-	void InitTextToSpeech(void);
+	void InitTextToSpeech();
 	bool TextToSpeechSearch(TextToSpeechSearchDirection dir,
-							TextToSpeechSearchType type);
-	void TextToSpeechReadChar(void);
-	void TextToSpeechReadWord(void);
-	void TextToSpeechReadLine(void);
-	void TextToSpeechReadSentence(void);
-	void TextToSpeechReadScreen(void);
-	void InitTextView(void);
-	void TextView(void);
+	                        TextToSpeechSearchType type);
+	void TextToSpeechReadChar();
+	void TextToSpeechReadWord();
+	void TextToSpeechReadLine();
+	void TextToSpeechReadSentence();
+	void TextToSpeechReadScreen();
+	void InitTextView();
+	void TextView();
 	void TextViewSetCursorPos(int line, int col);
 	bool RebootSystem();
 	void LoadUserKeyMap(void);

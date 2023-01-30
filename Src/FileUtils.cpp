@@ -1,7 +1,6 @@
 /****************************************************************
 BeebEm - BBC Micro and Master 128 Emulator
-Copyright (C) 2006  Jon Welch
-Copyright (C) 2019  Alistair Cree
+Copyright (C) 2023 Chris Needham
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -18,25 +17,34 @@ License along with this program; if not, write to the Free
 Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 Boston, MA  02110-1301, USA.
 ****************************************************************/
-/* Teletext Support for Beebem */
 
-extern bool TeletextAdapterEnabled;
-extern int TeletextAdapterTrigger;
+#include <windows.h>
 
-extern bool TeletextFiles;
-extern bool TeletextLocalhost;
-extern bool TeletextCustom;
+#include "FileUtils.h"
 
-extern char TeletextIP[4][20];
-extern u_short TeletextPort[4];
-extern char TeletextCustomIP[4][20];
-extern u_short TeletextCustomPort[4];
+bool FileExists(const char* FileName)
+{
+	DWORD dwAttrib = GetFileAttributes(FileName);
 
-void TeletextWrite(int Address, int Value);
-unsigned char TeletextRead(int Address);
-void TeletextAdapterUpdate();
+	return dwAttrib != INVALID_FILE_ATTRIBUTES &&
+		!(dwAttrib & FILE_ATTRIBUTE_DIRECTORY);
+}
 
-#define TeletextPoll() { if (TeletextAdapterTrigger <= TotalCycles) TeletextAdapterUpdate(); }
+std::string AppendPath(const std::string& BasePath, const std::string& Path)
+{
+	std::string PathName(BasePath);
 
-void TeletextInit();
-void TeletextClose();
+	if (!PathName.empty())
+	{
+		char LastChar = PathName[PathName.size() - 1];
+
+		if (LastChar != '\\' && LastChar != '/')
+		{
+			PathName.append(1, '\\');
+		}
+	}
+
+	PathName += Path;
+
+	return PathName;
+}

@@ -108,33 +108,34 @@ Boston, MA  02110-1301, USA.
 #define IDR_ACCELERATORS                115
 #define IDD_ROMCONFIG                   116
 #define IDD_SELECT_KEY                  117
+#define IDD_RENAME_FILE                 118
 #define IDC_DEBUGBREAK                  1010
 #define IDC_DEBUGINFO                   1015
 #define IDC_DEBUGCOMMAND                1016
 #define IDC_DEBUGEXECUTE                1017
-#define IDC_DEBUGVIDEO                  1022
-#define IDC_DEBUGVIDEOBRK               1023
-#define IDC_DEBUGSYSVIA                 1024
-#define IDC_DEBUGSYSVIABRK              1025
-#define IDC_DEBUGUSERVIA                1026
-#define IDC_DEBUGUSERVIABRK             1027
+#define IDC_DEBUG_VIDEO                 1022
+#define IDC_DEBUG_VIDEO_BRK             1023
+#define IDC_DEBUG_SYSVIA                1024
+#define IDC_DEBUG_SYSVIA_BRK            1025
+#define IDC_DEBUG_USERVIA               1026
+#define IDC_DEBUG_USERVIA_BRK           1027
 #define IDC_DEBUGBREAKPOINTS            1028
 #define IDC_DEBUGBPS                    1029
 #define IDC_DEBUGOS                     1030
 #define IDC_DEBUGROM                    1031
 #define IDC_TCMAP                       1031
-#define IDC_DEBUGTUBE                   1032
+#define IDC_DEBUG_TUBE                  1032
 #define IDC_TCPLAY                      1032
-#define IDC_DEBUGTUBEBRK                1033
+#define IDC_DEBUG_TUBE_BRK              1033
 #define IDC_TCSTOP                      1033
 #define IDC_DEBUGHOST                   1034
 #define IDC_TCRECORD                    1034
 #define IDC_DEBUGPARASITE               1035
 #define IDC_TCEJECT                     1035
-#define IDC_DEBUGSERIAL                 1036
-#define IDC_DEBUGSERIALBRK              1037
-#define IDC_DEBUGECONET                 1038
-#define IDC_DEBUGECONETBRK              1039
+#define IDC_DEBUG_SERIAL                1036
+#define IDC_DEBUG_SERIAL_BRK            1037
+#define IDC_DEBUG_ECONET                1038
+#define IDC_DEBUG_ECONET_BRK            1039
 #define IDC_DEBUGTRCBRK                 1040
 #define IDC_OB7                         1041
 #define IDC_OB6                         1042
@@ -161,8 +162,8 @@ Boston, MA  02110-1301, USA.
 #define IDK_BIT6                        1063
 #define IDK_BIT7                        1064
 #define IDC_EXPORTFILELIST              1065
-#define IDC_DEBUGREMSER                 1066
-#define IDC_DEBUGREMSERBRK              1067
+#define IDC_DEBUG_REMSER                1066
+#define IDC_DEBUG_REMSER_BRK            1067
 #define IDC_DEBUGWATCHES                1068
 #define IDC_DEBUGWATCHLABEL             1069
 #define IDC_BREAKLABEL                  1070
@@ -182,10 +183,14 @@ Boston, MA  02110-1301, USA.
 #define IDC_EMPTY                       1084
 #define IDC_SAVE                        1085
 #define IDC_LOAD                        1086
-#define IDC_DEBUGTELETEXT               1087
+#define IDC_DEBUG_TELETEXT              1087
 #define IDC_SHIFT                       1088
-#define IDC_DEBUGTELETEXTBRK            1089
+#define IDC_DEBUG_CMOS                  1088
+#define IDC_DEBUG_TELETEXT_BRK          1089
 #define IDC_ASSIGNED_KEYS               1090
+#define IDC_DEBUG_CMOS_BRK              1090
+#define IDC_BEEB_FILE_NAME              1091
+#define IDC_HOST_FILE_NAME              1092
 #define IDM_ABOUT                       40001
 #define IDM_DISC                        40002
 #define IDM_LOADDISC0                   40002
@@ -241,8 +246,8 @@ Boston, MA  02110-1301, USA.
 #define IDM_DEFINEKEYMAP                40061
 #define IDM_NEWDISC0                    40062
 #define IDM_NEWDISC1                    40063
-#define IDM_WPDISC0                     40064
-#define IDM_WPDISC1                     40065
+#define IDM_WRITE_PROTECT_DISC0         40064
+#define IDM_WRITE_PROTECT_DISC1         40065
 #define IDM_SAVE_PREFS                  40066
 #define IDM_FULLSCREEN                  40067
 #define IDM_AMXONOFF                    40068
@@ -365,7 +370,7 @@ Boston, MA  02110-1301, USA.
 #define IDM_DISABLEKEYSESCAPE           40213
 #define IDM_DISABLEKEYSSHORTCUT         40214
 #define IDM_DISABLEKEYSALL              40215
-#define IDM_WPONLOAD                    40216
+#define IDM_WRITE_PROTECT_ON_LOAD       40216
 #define IDM_DISPGDI                     40217
 #define IDM_DISPDDRAW                   40218
 #define IDM_DISPDX9                     40219
@@ -377,7 +382,7 @@ Boston, MA  02110-1301, USA.
 #define IDM_1280X1024                   40225
 #define IDM_1440X1080                   40226
 #define IDM_1600X1200                   40227
-#define ID_UPRM                         40228
+#define ID_USER_PORT_RTC_MODULE         40228
 #define IDM_LOADKEYMAP                  40230
 #define IDM_SAVEKEYMAP                  40231
 #define IDM_AUTOSAVE_PREFS_CMOS         40232
@@ -414,7 +419,6 @@ Boston, MA  02110-1301, USA.
 #define IDM_CAPTUREPNG                  40269
 #define IDM_CAPTURESCREEN               40270
 #define ID_FLOPPYDRIVE                  40271
-#define ID_RTCY2KADJUST                 40272
 #define ID_IP232RAW                     40274
 #define IDM_SWRAMBOARD                  40276
 #define IDM_ROMCONFIG                   40277
@@ -442,9 +446,9 @@ Boston, MA  02110-1301, USA.
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        118
+#define _APS_NEXT_RESOURCE_VALUE        119
 #define _APS_NEXT_COMMAND_VALUE         40320
-#define _APS_NEXT_CONTROL_VALUE         1090
+#define _APS_NEXT_CONTROL_VALUE         1092
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

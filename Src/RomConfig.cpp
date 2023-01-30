@@ -29,7 +29,9 @@ Boston, MA  02110-1301, USA.
 #include "main.h"
 #include "beebwin.h"
 #include "beebmem.h"
-#include "filedialog.h"
+#include "FileDialog.h"
+#include "ListView.h"
+#include "sysvia.h"
 
 static HWND hWndROMList = NULL;
 static HWND hWndModel = NULL;
@@ -62,48 +64,6 @@ void BeebWin::EditROMConfig(void)
 }
 
 /****************************************************************************/
-static int LVInsertColumn(
-	HWND hWnd, UINT uCol, const LPTSTR pszText, int iAlignment, UINT uWidth)
-{
-	LVCOLUMN lc = {0};
-	lc.mask = LVCF_SUBITEM | LVCF_TEXT | LVCF_FMT | LVCF_WIDTH;
-	lc.fmt = iAlignment;
-	lc.pszText = pszText;
-	lc.iSubItem = uCol;
-	lc.cx = uWidth;
-	return ListView_InsertColumn(hWnd, uCol, &lc);
-}
-
-static int LVInsertItem(
-	HWND hWnd, UINT uRow, UINT uCol, const LPTSTR pszText, LPARAM lParam)
-{
-	LVITEM li = {0};
-	li.mask = LVIF_TEXT | LVIF_PARAM;
-	li.iItem = uRow;
-	li.iSubItem = uCol;
-	li.pszText = pszText;
-	li.lParam = (lParam ? lParam : uRow);
-	return ListView_InsertItem(hWnd, &li);
-}
-
-static void LVSetItemText(
-	HWND hWnd, UINT uRow, UINT uCol, const LPTSTR pszText)
-{
-	ListView_SetItemText(hWnd, uRow, uCol, pszText);
-}
-
-static void LVSetFocus(HWND hWnd)
-{
-	int row = ListView_GetSelectionMark(hWnd);
-	ListView_SetItemState(hWndROMList,
-	                      row,
-	                      LVIS_SELECTED | LVIS_FOCUSED,
-	                      LVIS_SELECTED | LVIS_FOCUSED);
-
-	SetFocus(hWnd);
-}
-
-/****************************************************************************/
 static void UpdateROMField(int row)
 {
 	char szROMFile[_MAX_PATH];
@@ -128,7 +88,6 @@ static void UpdateROMField(int row)
 /****************************************************************************/
 static void FillROMList(void)
 {
-
 	Edit_SetText(hWndModel, szModel[static_cast<int>(nModel)]);
 
 	ListView_DeleteAllItems(hWndROMList);
@@ -193,6 +152,8 @@ static INT_PTR CALLBACK ROMConfigDlgProc(HWND hwndDlg, UINT message,
 				if (row >= 0 && row <= 16)
 				{
 					char szROMFile[MAX_PATH];
+					szROMFile[0] = '\0';
+
 					if (GetROMFile(hwndDlg, szROMFile))
 					{
 						strcpy(ROMCfg[static_cast<int>(nModel)][row], szROMFile);
@@ -263,29 +224,30 @@ static bool LoadROMConfigFile(HWND hWnd)
 {
 	char DefaultPath[MAX_PATH];
 	char szROMConfigPath[MAX_PATH];
-	char *pFileName = szROMConfigPath;
+	szROMConfigPath[0] = '\0';
 	bool success = false;
 	const char* filter = "ROM Config File (*.cfg)\0*.cfg\0";
 
-	szROMConfigPath[0] = 0;
-	mainWin->GetDataPath(mainWin->GetUserDataPath(), szROMConfigPath);
-
 	if (szDefaultROMConfigPath[0])
+	{
 		strcpy(DefaultPath, szDefaultROMConfigPath);
+	}
 	else
-		strcpy(DefaultPath, szROMConfigPath);
+	{
+		strcpy(DefaultPath, mainWin->GetUserDataPath());
+	}
 
-	FileDialog fileDialog(hWnd, pFileName, MAX_PATH, DefaultPath, filter);
+	FileDialog fileDialog(hWnd, szROMConfigPath, MAX_PATH, DefaultPath, filter);
 	if (fileDialog.Open())
 	{
 		// Save directory as default for next time
-		unsigned int PathLength = (unsigned int)(strrchr(pFileName, '\\') - pFileName);
-		strncpy(szDefaultROMConfigPath, pFileName, PathLength);
+		unsigned int PathLength = (unsigned int)(strrchr(szROMConfigPath, '\\') - szROMConfigPath);
+		strncpy(szDefaultROMConfigPath, szROMConfigPath, PathLength);
 		szDefaultROMConfigPath[PathLength] = 0;
 
 		// Read the file
 		ROMConfigFile LoadedROMCfg;
-		if (ReadROMFile(pFileName, LoadedROMCfg))
+		if (ReadROMFile(szROMConfigPath, LoadedROMCfg))
 		{
 			// Copy in loaded config
 			memcpy(&ROMCfg, &LoadedROMCfg, sizeof(ROMConfigFile));
@@ -302,34 +264,35 @@ static bool SaveROMConfigFile(HWND hWnd)
 {
 	char DefaultPath[MAX_PATH];
 	char szROMConfigPath[MAX_PATH];
-	char *pFileName = szROMConfigPath;
+	szROMConfigPath[0] = '\0';
 	bool success = false;
 	const char* filter = "ROM Config File (*.cfg)\0*.cfg\0";
 
-	szROMConfigPath[0] = 0;
-	mainWin->GetDataPath(mainWin->GetUserDataPath(), szROMConfigPath);
-
 	if (szDefaultROMConfigPath[0])
+	{
 		strcpy(DefaultPath, szDefaultROMConfigPath);
+	}
 	else
-		strcpy(DefaultPath, szROMConfigPath);
+	{
+		strcpy(DefaultPath, mainWin->GetUserDataPath());
+	}
 
-	FileDialog fileDialog(hWnd, pFileName, MAX_PATH, DefaultPath, filter);
+	FileDialog fileDialog(hWnd, szROMConfigPath, MAX_PATH, DefaultPath, filter);
 	if (fileDialog.Save())
 	{
 		// Save directory as default for next time
-		unsigned int PathLength = (unsigned int)(strrchr(pFileName, '\\') - pFileName);
-		strncpy(szDefaultROMConfigPath, pFileName, PathLength);
+		unsigned int PathLength = (unsigned int)(strrchr(szROMConfigPath, '\\') - szROMConfigPath);
+		strncpy(szDefaultROMConfigPath, szROMConfigPath, PathLength);
 		szDefaultROMConfigPath[PathLength] = 0;
 
 		// Add a file extension if required
-		if (strchr(pFileName, '.') == NULL)
+		if (strchr(szROMConfigPath, '.') == NULL)
 		{
-			strcat(pFileName, ".cfg");
+			strcat(szROMConfigPath, ".cfg");
 		}
 
 		// Save the file
-		if (WriteROMFile(pFileName, ROMCfg))
+		if (WriteROMFile(szROMConfigPath, ROMCfg))
 		{
 			success = true;
 		}

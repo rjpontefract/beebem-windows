@@ -30,6 +30,7 @@ keyboard emulation - David Alan Gilbert 30/10/94 */
 #include <windows.h>
 
 #include "6502core.h"
+#include "Bcd.h"
 #include "beebsound.h"
 #include "beebmem.h"
 #include "beebwin.h"
@@ -41,13 +42,6 @@ keyboard emulation - David Alan Gilbert 30/10/94 */
 #ifdef SPEECH_ENABLED
 #include "speech.h"
 #endif
-
-using namespace std;
-
-/* Clock stuff for Master 128 RTC */
-time_t SysTime;
-time_t RTCTimeOffset=0;
-bool RTCY2KAdjust = true;
 
 // Shift register stuff
 unsigned char SRMode;
@@ -67,11 +61,6 @@ char WEState=0;
    select on speech proc, B2 is write select on speech proc, b4,b5 select
    screen start address offset , b6 is CAPS lock, b7 is shift lock */
 unsigned char IC32State=0;
-bool OldCMOSState = false;
-
-// CMOS logging facilities
-bool CMOSDebug = false;
-FILE *CMDF;
 
 /* Last value written to the slow data bus - sound reads it later */
 static unsigned char SlowDataBusWriteValue=0;
@@ -82,6 +71,48 @@ static unsigned int KBDCol=0;
 
 static bool SysViaKbdState[16][8]; // Col, row
 static int KeysDown=0;
+
+// Master 128 MC146818AP Real-Time Clock and RAM
+static time_t RTCTimeOffset = 0;
+
+struct CMOSType
+{
+	bool Enabled;
+	// unsigned char ChipSelect;
+	unsigned char Address;
+	// unsigned char StrobedData;
+	bool DataStrobe;
+	bool Op;
+};
+
+static struct CMOSType CMOS;
+static bool OldCMOSState = false;
+unsigned char CMOSRAM[64]; // RTC registers + 50 bytes CMOS RAM
+
+// 0x0: Seconds (0 to 59)
+// 0x1: Alarm Seconds (0 to 59)
+// 0x2: Minutes (0 to 59)
+// 0x3: Alarm Minutes (0 to 59)
+// 0x4: Hours (0 to 23)
+// 0x5: Alarm Hours (0 to 23)
+// 0x6: Day of week (1 = Sun, 7 = Sat)
+// 0x7: Day of month (1 to 31)
+// 0x8: Month (1 = Jan, 12 = Dec)
+// 0x9: Year (last 2 digits)
+// 0xA: Register A
+// 0xB: Register B
+// 0xC: Register C
+// 0xD: Register D
+// 0xE to 0x3F: User RAM (50 bytes)
+
+// Backup of CMOS Defaults (RAM bytes only)
+const unsigned char CMOSDefault[50] =
+{
+	0x00, 0x00, 0x00, 0x00, 0x00,
+	0xc9, 0xff, 0xfe, 0x32, 0x00,
+	0x07, 0xc1, 0x1e, 0x05, 0x00,
+	0x59, 0xa2
+};
 
 /*--------------------------------------------------------------------------*/
 static void UpdateIFRTopBit(void) {
@@ -208,11 +239,9 @@ static void IC32Write(unsigned char Value) {
   OldCMOSState = tmpCMOSState;
   if (CMOS.DataStrobe && CMOS.Enabled && !CMOS.Op && MachineType == Model::Master128) {
     CMOSWrite(CMOS.Address, SlowDataBusWriteValue);
-    if (CMOSDebug) fprintf(CMDF,"Wrote %02x to %02x\n",SlowDataBusWriteValue,CMOS.Address);
   }
   if (CMOS.Enabled && CMOS.Op && MachineType == Model::Master128) {
     SysVIAState.ora = CMOSRead(CMOS.Address);
-    if (CMOSDebug) fprintf(CMDF,"Read %02x from %02x\n",SysVIAState.ora,CMOS.Address);
   }
 
   /* Must do sound reg access when write line changes */
@@ -270,8 +299,7 @@ static void SlowDataBusWrite(unsigned char Value) {
 static unsigned char SlowDataBusRead() {
   if (CMOS.Enabled && CMOS.Op && MachineType == Model::Master128)
   {
-    SysVIAState.ora=CMOSRead(CMOS.Address); //SysVIAState.ddra ^ CMOSRAM[CMOS.Address];
-    if (CMOSDebug) fprintf(CMDF,"Read %02x from %02x\n",SysVIAState.ora,CMOS.Address);
+    SysVIAState.ora = CMOSRead(CMOS.Address); // SysVIAState.ddra ^ CMOSRAM[CMOS.Address];
   }
 
   unsigned char result = SysVIAState.ora & SysVIAState.ddra;
@@ -378,7 +406,7 @@ void SysVIAWrite(int Address, unsigned char Value)
       SysVIAState.timer2l |= Value << 8;
       SysVIAState.timer2c=SysVIAState.timer2l * 2 + 1;
       if (SysVIAState.timer2c == 0) SysVIAState.timer2c = 0x20000; 
-      SysVIAState.ifr &=0xdf; // clear timer 2 ifr 
+      SysVIAState.ifr &= 0xdf; // Clear timer 2 IFR
       UpdateIFRTopBit();
       SysVIAState.timer2hasshot = false;
       break;
@@ -657,102 +685,139 @@ void SysVIAReset()
 }
 
 /*-------------------------------------------------------------------------*/
-unsigned char BCD(unsigned char nonBCD) {
-	// convert a decimal value to a BCD value
-	return(((nonBCD/10)*16)+nonBCD%10);
-}
-unsigned char BCDToBin(unsigned char BCD) {
-	// convert a BCD value to decimal value
-	return((BCD>>4)*10+(BCD&15));
-}
-/*-------------------------------------------------------------------------*/
-time_t CMOSConvertClock()
+
+static time_t CMOSConvertClock()
 {
 	struct tm Base;
-	Base.tm_sec = BCDToBin(CMOSRAM[0]);
-	Base.tm_min = BCDToBin(CMOSRAM[2]);
-	Base.tm_hour = BCDToBin(CMOSRAM[4]);
-	Base.tm_mday = BCDToBin(CMOSRAM[7]);
-	Base.tm_mon = BCDToBin(CMOSRAM[8])-1;
-	Base.tm_year = BCDToBin(CMOSRAM[9]);
-	Base.tm_wday = -1;
-	Base.tm_yday = -1;
+	Base.tm_sec   = BCDToBin(CMOSRAM[0]);
+	Base.tm_min   = BCDToBin(CMOSRAM[2]);
+	Base.tm_hour  = BCDToBin(CMOSRAM[4]);
+	Base.tm_mday  = BCDToBin(CMOSRAM[7]);
+	Base.tm_mon   = BCDToBin(CMOSRAM[8]) - 1;
+	Base.tm_year  = BCDToBin(CMOSRAM[9]);
+	Base.tm_wday  = -1;
+	Base.tm_yday  = -1;
 	Base.tm_isdst = -1;
+
+	time_t SysTime;
+	time(&SysTime);
+	struct tm *CurTime = localtime(&SysTime);
+	Base.tm_year += (CurTime->tm_year / 100) * 100;
 
 	return mktime(&Base);
 }
+
 /*-------------------------------------------------------------------------*/
+
 void RTCInit()
 {
+	time_t SysTime;
 	time(&SysTime);
 	struct tm *CurTime = localtime(&SysTime);
+
 	CMOSRAM[0] = BCD(static_cast<unsigned char>(CurTime->tm_sec));
 	CMOSRAM[2] = BCD(static_cast<unsigned char>(CurTime->tm_min));
 	CMOSRAM[4] = BCD(static_cast<unsigned char>(CurTime->tm_hour));
 	CMOSRAM[6] = BCD(static_cast<unsigned char>(CurTime->tm_wday + 1));
 	CMOSRAM[7] = BCD(static_cast<unsigned char>(CurTime->tm_mday));
 	CMOSRAM[8] = BCD(static_cast<unsigned char>(CurTime->tm_mon + 1));
-	CMOSRAM[9] = BCD(static_cast<unsigned char>(CurTime->tm_year - (RTCY2KAdjust ? 20 : 0)));
+	CMOSRAM[9] = BCD(static_cast<unsigned char>(CurTime->tm_year % 100));
+
 	RTCTimeOffset = SysTime - CMOSConvertClock();
 }
+
 /*-------------------------------------------------------------------------*/
-void RTCUpdate()
+
+static void RTCUpdate()
 {
+	time_t SysTime;
 	time(&SysTime);
 	SysTime -= RTCTimeOffset;
 	struct tm *CurTime = localtime(&SysTime);
+
 	CMOSRAM[0] = BCD(static_cast<unsigned char>(CurTime->tm_sec));
 	CMOSRAM[2] = BCD(static_cast<unsigned char>(CurTime->tm_min));
 	CMOSRAM[4] = BCD(static_cast<unsigned char>(CurTime->tm_hour));
 	CMOSRAM[6] = BCD(static_cast<unsigned char>(CurTime->tm_wday + 1));
 	CMOSRAM[7] = BCD(static_cast<unsigned char>(CurTime->tm_mday));
 	CMOSRAM[8] = BCD(static_cast<unsigned char>(CurTime->tm_mon + 1));
-	CMOSRAM[9] = BCD(static_cast<unsigned char>(CurTime->tm_year));
+	CMOSRAM[9] = BCD(static_cast<unsigned char>(CurTime->tm_year % 100));
 }
+
 /*-------------------------------------------------------------------------*/
-void CMOSWrite(unsigned char CMOSAddr,unsigned char CMOSData) {
-	// Many thanks to Tom Lees for supplying me with info on the 146818 registers 
+
+void CMOSWrite(unsigned char Address, unsigned char Value)
+{
+	if (DebugEnabled)
+	{
+	  DebugDisplayTraceF(DebugType::CMOS, true,
+	                     "CMOS: Write address %X value %02X",
+	                     Address, Value);
+	}
+
+	// Many thanks to Tom Lees for supplying me with info on the 146818 registers
 	// for these two functions.
-	if (CMOSAddr>0xd) {
-		CMOSRAM[CMOSAddr]=CMOSData;
+	if (Address <= 0x9)
+	{
+		// Clock registers
+		CMOSRAM[Address] = Value;
 	}
-	else if (CMOSAddr==0xa) {
+	else if (Address == 0xa)
+	{
 		// Control register A
-		CMOSRAM[CMOSAddr]=CMOSData & 0x7f; // Top bit not writable
+		CMOSRAM[Address] = Value & 0x7f; // Top bit not writable
 	}
-	else if (CMOSAddr==0xb) {
+	else if (Address == 0xb)
+	{
 		// Control register B
 		// Bit-7 SET - 0=clock running, 1=clock update halted
-		if (CMOSData & 0x80) {
+		if (Value & 0x80)
+		{
 			RTCUpdate();
 		}
-		else if ((CMOSRAM[CMOSAddr] & 0x80) && !(CMOSData & 0x80)) {
+		else if ((CMOSRAM[Address] & 0x80) && !(Value & 0x80))
+		{
 			// New clock settings
+			time_t SysTime;
 			time(&SysTime);
 			RTCTimeOffset = SysTime - CMOSConvertClock();
 		}
-		CMOSRAM[CMOSAddr]=CMOSData;
+
+		CMOSRAM[Address] = Value;
 	}
-	else if (CMOSAddr==0xc) {
-		// Control register C - read only
+	else if (Address == 0xc || Address == 0xd)
+	{
+		// Control register C and D - read only
 	}
-	else if (CMOSAddr==0xd) {
-		// Control register D - read only
-	}
-	else {
-		// Clock registers
-		CMOSRAM[CMOSAddr]=CMOSData;
+	else if (Address <= 0x3f)
+	{
+		// User RAM
+		CMOSRAM[Address] = Value;
 	}
 }
 
 /*-------------------------------------------------------------------------*/
-unsigned char CMOSRead(unsigned char CMOSAddr) {
+
+unsigned char CMOSRead(unsigned char Address)
+{
 	// 0x0 to 0x9 - Clock
 	// 0xa to 0xd - Regs
 	// 0xe to 0x3f - RAM
-	if (CMOSAddr<0xa)
+	if (Address <= 0x9)
+	{
 		RTCUpdate();
-	return(CMOSRAM[CMOSAddr]);
+	}
+
+	unsigned char Value = CMOSRAM[Address];
+
+	if (DebugEnabled)
+	{
+	  DebugDisplayTraceF(DebugType::CMOS, true,
+	                     "CMOS: Read address %X value %02X",
+	                     Address, Value);
+	}
+
+	return Value;
 }
 
 /*--------------------------------------------------------------------------*/

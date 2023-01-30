@@ -49,34 +49,32 @@ Boston, MA  02110-1301, USA.
 #include "StringUtils.h"
 #include "DebugTrace.h"
 
-#define MAX_LINES 4096          // Max lines in info window
-#define LINES_IN_INFO 28        // Visible lines in info window
-#define MAX_COMMAND_LEN 200     // Max debug command length
-#define MAX_BPS 50              // Max num of breakpoints/watches
-#define MAX_HISTORY 20          // Number of commands in the command history.
+constexpr int MAX_LINES = 4096;          // Max lines in info window
+constexpr int LINES_IN_INFO = 28;        // Visible lines in info window
+constexpr int MAX_COMMAND_LEN = 200;     // Max debug command length
+constexpr int MAX_BPS = 50;              // Max num of breakpoints/watches
+constexpr int MAX_HISTORY = 20;          // Number of commands in the command history.
 
 // Instruction format
-#define IMM  0x20
-#define ABS  0x40
-#define ACC  0x80
-#define IMP  0x100
-#define INX  0x200
-#define INY  0x400
-#define ZPX  0x800
-#define ABX  0x1000
-#define ABY  0x2000
-#define REL  0x4000
-#define IND  0x8000
-#define ZPY  0x10000
-#define ZPG  0x20000
-#define ZPR  0x40000
-#define ILL  0x80000
+constexpr int IMM = 0x20;
+constexpr int ABS = 0x40;
+constexpr int ACC = 0x80;
+constexpr int IMP = 0x100;
+constexpr int INX = 0x200;
+constexpr int INY = 0x400;
+constexpr int ZPX = 0x800;
+constexpr int ABX = 0x1000;
+constexpr int ABY = 0x2000;
+constexpr int REL = 0x4000;
+constexpr int IND = 0x8000;
+constexpr int ZPY = 0x10000;
+constexpr int ZPG = 0x20000;
+constexpr int ZPR = 0x40000;
+constexpr int ILL = 0x80000;
 
-#define STR(x) #x
+constexpr int ADRMASK = IMM | ABS | ACC | IMP | INX | INY | ZPX | ABX | ABY | REL | IND | ZPY | ZPG | ZPR | ILL;
 
-#define ADRMASK (IMM | ABS | ACC | IMP | INX | INY | ZPX | ABX | ABY | REL | IND | ZPY | ZPG | ZPR | ILL)
-
-const int MAX_BUFFER = 65536;
+constexpr int MAX_BUFFER = 65536;
 
 bool DebugEnabled = false; // Debug dialog visible
 static DebugType DebugSource = DebugType::None; // Debugging active?
@@ -84,8 +82,6 @@ static int LinesDisplayed = 0;  // Lines in info window
 static int InstCount = 0;       // Instructions to execute before breaking
 static int DumpAddress = 0;     // Next address for memory dump command
 static int DisAddress = 0;      // Next address for disassemble command
-static int BPCount = 0;         // Num of breakpoints
-static int WCount = 0;          // Num of watches
 static int LastBreakAddr = 0;   // Address of last break
 static int DebugInfoWidth = 0;  // Width of debug info window
 static bool BPSOn = true;
@@ -108,10 +104,15 @@ static HWND hwndInfo;
 static HWND hwndBP;
 static HWND hwndW;
 static HACCEL haccelDebug;
+
 static std::vector<Label> Labels;
-static Breakpoint Breakpoints[MAX_BPS];
-static Watch Watches[MAX_BPS];
+static std::vector<Breakpoint> Breakpoints;
+static std::vector<Watch> Watches;
+
+typedef std::vector<AddrInfo> MemoryMap;
+
 static MemoryMap MemoryMaps[17];
+
 INT_PTR CALLBACK DebugDlgProc(HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
 std::deque<std::string> DebugHistory;
@@ -1052,7 +1053,8 @@ void DebugCloseDialog()
 	InstCount = 0;
 	DumpAddress = 0;
 	DisAddress = 0;
-	BPCount = 0;
+	Breakpoints.clear();
+	Watches.clear();
 	BPSOn = true;
 	StepOver = false;
 	ReturnAddress = 0;
@@ -1064,8 +1066,6 @@ void DebugCloseDialog()
 	DebugHost = true;
 	DebugParasite = false;
 	DebugInfoWidth = 0;
-	memset(Breakpoints, 0, MAX_BPS * sizeof(Breakpoint));
-	memset(Watches, 0, MAX_BPS * sizeof(Watch));
 }
 
 //*******************************************************************
@@ -1235,75 +1235,145 @@ void DebugBreakExecution(DebugType type)
 	}
 }
 
-void DebugAssertBreak(int addr, int prevAddr, bool host)
+static const char* GetDebugSourceString()
 {
-	AddrInfo addrInfo;
 	const char* source = "Unknown";
-
-	DebugUpdateWatches(false);
-	SetDlgItemText(hwndDebug, IDC_DEBUGBREAK, "Continue");
-
-	if(LastBreakAddr == 0)
-		LastBreakAddr = addr;
-	else
-		return;
 
 	switch(DebugSource)
 	{
 	case DebugType::None:
 		break;
+
 	case DebugType::Video:
 		source = "Video";
 		break;
-	case DebugType::Serial:
-		source = "Serial";
-		break;
-	case DebugType::Econet:
-		source = "Econet";
-		break;
-	case DebugType::Tube:
-		source = "Tube";
-		break;
-	case DebugType::SysVIA:
-		source = "System VIA";
-		break;
+
 	case DebugType::UserVIA:
 		source = "User VIA";
 		break;
-	case DebugType::Manual:
-		source = "Manual";
+
+	case DebugType::SysVIA:
+		source = "System VIA";
 		break;
-	case DebugType::Breakpoint:
-		source = "Breakpoint";
+
+	case DebugType::Tube:
+		source = "Tube";
 		break;
-	case DebugType::BRK:
-		source = "BRK instruction";
+
+	case DebugType::Serial:
+		source = "Serial";
 		break;
-	case DebugType::RemoteServer:
-		source = "Remote server";
+
+	case DebugType::Econet:
+		source = "Econet";
 		break;
+
 	case DebugType::Teletext:
 		source = "Teletext";
 		break;
+
+	case DebugType::RemoteServer:
+		source = "Remote server";
+		break;
+
+	case DebugType::Manual:
+		source = "Manual";
+		break;
+
+	case DebugType::Breakpoint:
+		source = "Breakpoint";
+		break;
+
+	case DebugType::CMOS:
+		source = "CMOS";
+		break;
+
+	case DebugType::BRK:
+		source = "BRK instruction";
+		break;
+	}
+
+	return source;
+}
+
+static void DebugDisplayPreviousAddress(int prevAddr)
+{
+	if (prevAddr > 0)
+	{
+		AddrInfo addrInfo;
+
+		if (DebugLookupAddress(prevAddr, &addrInfo))
+		{
+			DebugDisplayInfoF("  Previous PC 0x%04X (%s)", prevAddr, addrInfo.desc.c_str());
+		}
+		else
+		{
+			DebugDisplayInfoF("  Previous PC 0x%04X", prevAddr);
+		}
+	}
+}
+
+void DebugAssertBreak(int addr, int prevAddr, bool host)
+{
+	AddrInfo addrInfo;
+
+	DebugUpdateWatches(false);
+	SetDlgItemText(hwndDebug, IDC_DEBUGBREAK, "Continue");
+
+	if (LastBreakAddr == 0)
+	{
+		LastBreakAddr = addr;
+	}
+	else
+	{
+		return;
 	}
 
 	if (DebugSource == DebugType::Breakpoint)
 	{
-		for(int i = 0; i < BPCount; i++)
+		for (const Breakpoint& bp : Breakpoints)
 		{
-			if(Breakpoints[i].start == addr)
+			if (bp.start == addr)
 			{
-				DebugDisplayInfoF("%s break at 0x%04X (Breakpoint '%s' / %s)",(host ? "Host" : "Parasite"), addr, Breakpoints[i].name, (DebugLookupAddress(addr, &addrInfo) ? addrInfo.desc : "Unknown"));
-				if(prevAddr > 0)
-					DebugDisplayInfoF("  Previous PC 0x%04X (%s)",prevAddr,DebugLookupAddress(prevAddr, &addrInfo) ? addrInfo.desc : "Unknown");
+				if (DebugLookupAddress(addr, &addrInfo))
+				{
+					DebugDisplayInfoF("%s break at 0x%04X (Breakpoint '%s' / %s)",
+					                  host ? "Host" : "Parasite",
+					                  addr,
+					                  bp.name.c_str(),
+					                  addrInfo.desc.c_str());
+				}
+				else
+				{
+					DebugDisplayInfoF("%s break at 0x%04X (Breakpoint '%s')",
+					                  host ? "Host" : "Parasite",
+					                  addr,
+					                  bp.name.c_str());
+				}
+
+				DebugDisplayPreviousAddress(prevAddr);
 				return;
 			}
 		}
 	}
 
-	DebugDisplayInfoF("%s break at 0x%04X %s / %s)",(host ? "Host" : "Parasite"), addr, source, DebugLookupAddress(addr, &addrInfo) ? addrInfo.desc : "Unknown");
-	if(prevAddr > 0)
-		DebugDisplayInfoF("  Previous PC 0x%04X (%s)",prevAddr,DebugLookupAddress(prevAddr, &addrInfo) ? addrInfo.desc : "Unknown");
+	if (DebugLookupAddress(addr, &addrInfo))
+	{
+		DebugDisplayInfoF("%s break at 0x%04X (%s / %s)",
+		                  host ? "Host" : "Parasite",
+		                  addr,
+		                  GetDebugSourceString(),
+		                  addrInfo.desc.c_str());
+	}
+	else
+	{
+		DebugDisplayInfoF("%s break at 0x%04X (%s)",
+		                  host ? "Host" : "Parasite",
+		                  addr,
+		                  GetDebugSourceString());
+	}
+
+	DebugDisplayPreviousAddress(prevAddr);
 }
 
 void DebugDisplayTrace(DebugType type, bool host, const char *info)
@@ -1313,32 +1383,32 @@ void DebugDisplayTrace(DebugType type, bool host, const char *info)
 		switch (type)
 		{
 		case DebugType::Video:
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGVIDEO))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_VIDEO))
 				DebugDisplayInfo(info);
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGVIDEOBRK))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_VIDEO_BRK))
 				DebugBreakExecution(type);
 			break;
 
 		case DebugType::UserVIA:
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGUSERVIA))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_USERVIA))
 				DebugDisplayInfo(info);
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGUSERVIABRK))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_USERVIA_BRK))
 				DebugBreakExecution(type);
 			break;
 
 		case DebugType::SysVIA:
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGSYSVIA))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_SYSVIA))
 				DebugDisplayInfo(info);
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGSYSVIABRK))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_SYSVIA_BRK))
 				DebugBreakExecution(type);
 			break;
 
 		case DebugType::Tube:
 			if ((DebugHost && host) || (DebugParasite && !host))
 			{
-				if (IsDlgItemChecked(hwndDebug, IDC_DEBUGTUBE))
+				if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_TUBE))
 					DebugDisplayInfo(info);
-				if (IsDlgItemChecked(hwndDebug, IDC_DEBUGTUBEBRK))
+				if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_TUBE_BRK))
 					DebugBreakExecution(type);
 			}
 
@@ -1346,29 +1416,37 @@ void DebugDisplayTrace(DebugType type, bool host, const char *info)
 			break;
 
 		case DebugType::Serial:
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGSERIAL))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_SERIAL))
 				DebugDisplayInfo(info);
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGSERIALBRK))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_SERIAL_BRK))
 				DebugBreakExecution(type);
 			break;
 
 		case DebugType::RemoteServer:
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGREMSER))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_REMSER))
 				DebugDisplayInfo(info);
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGREMSERBRK))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_REMSER_BRK))
 				DebugBreakExecution(type);
 			break;
 
 		case DebugType::Econet:
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGECONET))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_ECONET))
 				DebugDisplayInfo(info);
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGECONETBRK))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_ECONET_BRK))
 				DebugBreakExecution(type);
 			break;
+
 		case DebugType::Teletext:
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGTELETEXT))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_TELETEXT))
 				DebugDisplayInfo(info);
-			if (IsDlgItemChecked(hwndDebug, IDC_DEBUGTELETEXTBRK))
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_TELETEXT_BRK))
+				DebugBreakExecution(type);
+			break;
+
+		case DebugType::CMOS:
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_CMOS))
+				DebugDisplayInfo(info);
+			if (IsDlgItemChecked(hwndDebug, IDC_DEBUG_CMOS_BRK))
 				DebugBreakExecution(type);
 			break;
 		}
@@ -1399,7 +1477,7 @@ static void DebugUpdateWatches(bool all)
 	int value = 0;
 	char str[200];
 
-	for (int i = 0; i < WCount; ++i)
+	for (size_t i = 0; i < Watches.size(); ++i)
 	{
 		switch (Watches[i].type)
 		{
@@ -1446,22 +1524,22 @@ static void DebugUpdateWatches(bool all)
 
 			if (WatchDecimal)
 			{
-				sprintf(str, "%s%04X %s=%d (%c)", (Watches[i].host ? "" : "p"), Watches[i].start, Watches[i].name, Watches[i].value, Watches[i].type);
+				sprintf(str, "%s%04X %s=%d (%c)", (Watches[i].host ? "" : "p"), Watches[i].start, Watches[i].name.c_str(), Watches[i].value, Watches[i].type);
 			}
 			else
 			{
 				switch (Watches[i].type)
 				{
 					case 'b':
-						sprintf(str, "%s%04X %s=$%02X", Watches[i].host ? "" : "p", Watches[i].start, Watches[i].name, Watches[i].value);
+						sprintf(str, "%s%04X %s=$%02X", Watches[i].host ? "" : "p", Watches[i].start, Watches[i].name.c_str(), Watches[i].value);
 						break;
 
 					case 'w':
-						sprintf(str, "%s%04X %s=$%04X", Watches[i].host ? "" : "p", Watches[i].start, Watches[i].name, Watches[i].value);
+						sprintf(str, "%s%04X %s=$%04X", Watches[i].host ? "" : "p", Watches[i].start, Watches[i].name.c_str(), Watches[i].value);
 						break;
 
 					case 'd':
-						sprintf(str, "%s%04X %s=$%08X", Watches[i].host ? "" : "p", Watches[i].start, Watches[i].name, Watches[i].value);
+						sprintf(str, "%s%04X %s=$%08X", Watches[i].host ? "" : "p", Watches[i].start, Watches[i].name.c_str(), Watches[i].value);
 						break;
 				}
 			}
@@ -1471,7 +1549,14 @@ static void DebugUpdateWatches(bool all)
 	}
 }
 
-bool DebugDisassembler(int addr, int prevAddr, int Accumulator, int XReg, int YReg, int PSR, int StackReg, bool host)
+bool DebugDisassembler(int addr,
+                       int prevAddr,
+                       int Accumulator,
+                       int XReg,
+                       int YReg,
+                       unsigned char PSR,
+                       unsigned char StackReg,
+                       bool host)
 {
 	char str[150];
 	AddrInfo addrInfo;
@@ -1516,18 +1601,18 @@ bool DebugDisassembler(int addr, int prevAddr, int Accumulator, int XReg, int YR
 	// Check breakpoints
 	if (BPSOn && DebugSource != DebugType::Breakpoint)
 	{
-		for (int i = 0; i < BPCount; ++i)
+		for (const Breakpoint& bp : Breakpoints)
 		{
-			if (Breakpoints[i].end == -1)
+			if (bp.end == -1)
 			{
-				if (addr == Breakpoints[i].start)
+				if (addr == bp.start)
 				{
 					DebugBreakExecution(DebugType::Breakpoint);
 				}
 			}
 			else
 			{
-				if (addr >= Breakpoints[i].start && addr <= Breakpoints[i].end)
+				if (addr >= bp.start && addr <= bp.end)
 				{
 					DebugBreakExecution(DebugType::Breakpoint);
 				}
@@ -1546,7 +1631,18 @@ bool DebugDisassembler(int addr, int prevAddr, int Accumulator, int XReg, int YR
 		{
 			if (!LastAddrInBIOS)
 			{
-				DebugDisplayInfoF("Entered BIOS (0xF800-0xFFFF) at 0x%04X (%s)",addr,DebugLookupAddress(addr,&addrInfo) ? addrInfo.desc : "Unknown");
+				if (DebugLookupAddress(addr, &addrInfo))
+				{
+					DebugDisplayInfoF("Entered BIOS (0xF800-0xFFFF) at 0x%04X (%s)",
+					                  addr,
+					                  addrInfo.desc.c_str());
+				}
+				else
+				{
+					DebugDisplayInfoF("Entered BIOS (0xF800-0xFFFF) at 0x%04X",
+					                  addr);
+				}
+
 				LastAddrInBIOS = true;
 				LastAddrInOS = LastAddrInROM = false;
 			}
@@ -1561,7 +1657,15 @@ bool DebugDisassembler(int addr, int prevAddr, int Accumulator, int XReg, int YR
 		{
 			if (!LastAddrInOS)
 			{
-				DebugDisplayInfoF("Entered OS (0xC000-0xFBFF) at 0x%04X (%s)",addr,DebugLookupAddress(addr,&addrInfo) ? addrInfo.desc : "Unknown");
+				if (DebugLookupAddress(addr, &addrInfo))
+				{
+					DebugDisplayInfoF("Entered OS (0xC000-0xFBFF) at 0x%04X (%s)", addr, addrInfo.desc.c_str());
+				}
+				else
+				{
+					DebugDisplayInfoF("Entered OS (0xC000-0xFBFF) at 0x%04X", addr);
+				}
+
 				LastAddrInOS = true;
 				LastAddrInBIOS = LastAddrInROM = false;
 			}
@@ -1575,18 +1679,19 @@ bool DebugDisassembler(int addr, int prevAddr, int Accumulator, int XReg, int YR
 		{
 			if (!LastAddrInROM)
 			{
-				if(ReadRomInfo(PagedRomReg, &romInfo))
+				if (ReadRomInfo(ROMSEL, &romInfo))
 				{
-					DebugDisplayInfoF("Entered ROM \"%s\" (0x8000-0xBFFF) at 0x%04X", romInfo.Title, addr);
+					DebugDisplayInfoF("Entered paged ROM bank %d \"%s\" (0x8000-0xBFFF) at 0x%04X", ROMSEL, romInfo.Title, addr);
 				}
 				else
 				{
-					DebugDisplayInfoF("Entered unknown ROM (0x8000-0xBFFF) at 0x%04X", addr);
+					DebugDisplayInfoF("Entered paged ROM bank %d (0x8000-0xBFFF) at 0x%04X", ROMSEL, addr);
 				}
 
 				LastAddrInROM = true;
 				LastAddrInOS = LastAddrInBIOS = false;
 			}
+
 			return true;
 		}
 
@@ -1639,152 +1744,200 @@ bool DebugDisassembler(int addr, int prevAddr, int Accumulator, int XReg, int YR
 	return true;
 }
 
+static void DebugLookupSWRAddress(AddrInfo* addrInfo)
+{
+	addrInfo->start = 0x8000;
+	addrInfo->end   = 0xbfff;
+
+	RomInfo rom;
+	char desc[100];
+
+	const char* ROMType = RomWritable[ROMSEL] ? "Paged ROM" : "Sideways RAM";
+
+	// Try ROM info:
+	if (ReadRomInfo(ROMSEL, &rom))
+	{
+		sprintf(desc, "%s bank %d: %.80s", ROMType, ROMSEL, rom.Title);
+	}
+	else
+	{
+		sprintf(desc, "%s bank %d", ROMType, ROMSEL);
+	}
+
+	addrInfo->desc = desc;
+}
+
 static bool DebugLookupAddress(int addr, AddrInfo* addrInfo)
 {
 	RomInfo rom;
 
-	if(MemoryMaps[ROMSEL].count > 0)
+	// Try current ROM's map
+	if (!MemoryMaps[ROMSEL].empty())
 	{
-		// Try current ROM's map
-		for (int i = 0; i < MemoryMaps[ROMSEL].count; i++)
+		for (size_t i = 0; i < MemoryMaps[ROMSEL].size(); i++)
 		{
-			if(addr >= MemoryMaps[ROMSEL].entries[i].start && addr <= MemoryMaps[ROMSEL].entries[i].end)
+			if (addr >= MemoryMaps[ROMSEL][i].start && addr <= MemoryMaps[ROMSEL][i].end)
 			{
-				addrInfo->start = MemoryMaps[ROMSEL].entries[i].start;
-				addrInfo->end = MemoryMaps[ROMSEL].entries[i].end;
-				sprintf(addrInfo->desc, "%s", ReadRomInfo(ROMSEL, &rom) ? rom.Title : "ROM");
-				return true;
-			}
-		}
-	}
-	else if(addr >= 0x8000 && addr <= 0xBFFF && ReadRomInfo(ROMSEL, &rom))
-	{
-		addrInfo->start = 0x8000;
-		addrInfo->end = 0xBFFF;
+				addrInfo->start = MemoryMaps[ROMSEL][i].start;
+				addrInfo->end   = MemoryMaps[ROMSEL][i].end;
 
-		// Try ROM info:
-		if(ReadRomInfo(ROMSEL, &rom))
-		{
-			sprintf(addrInfo->desc,"Paged ROM bank %d: %s",ROMSEL,rom.Title);
-			return true;
+				char desc[100];
+				sprintf(desc, "%.99s", ReadRomInfo(ROMSEL, &rom) ? rom.Title : "ROM");
+				addrInfo->desc = desc;
+
+				return true;
+			}
 		}
-		else if(RomWritable[ROMSEL])
+	}
+
+	// Try OS map
+	if (!MemoryMaps[16].empty())
+	{
+		for (size_t i = 0; i < MemoryMaps[16].size(); i++)
 		{
-			sprintf(addrInfo->desc,"Sideways RAM bank %d",ROMSEL);
+			if (addr >= MemoryMaps[16][i].start && addr <= MemoryMaps[16][i].end)
+			{
+				*addrInfo = MemoryMaps[16][i];
+
+				return true;
+			}
+		}
+	}
+
+	if (MachineType == Model::B)
+	{
+		if (addr >= 0x8000 && addr < 0xc000)
+		{
+			DebugLookupSWRAddress(addrInfo);
 			return true;
 		}
 	}
-	else
+	else if (MachineType == Model::IntegraB)
 	{
-		// Some custom machine related stuff
-		if (MachineType == Model::Master128)
+		if (ShEn && !MemSel && addr >= 0x3000 && addr <= 0x7fff)
 		{
-			// Master cartridge (not implemented in BeebEm yet)
-			if((ACCCON & 0x20) && addr >= 0xFC00 && addr <= 0xFDFF)
-			{
-				addrInfo->start = 0xFC00;
-				addrInfo->end = 0xFDFF;
-				sprintf(addrInfo->desc,"Cartridge (ACCCON bit 5 set)");
-				return true;
-			}
-			// Master private and shadow RAM.
-			if((ACCCON & 0x08) && addr >= 0xC000 && addr <= 0xDFFF)
-			{
-				addrInfo->start = 0xC000;
-				addrInfo->end = 0xDFFF;
-				sprintf(addrInfo->desc,"8K Private RAM (ACCCON bit 3 set)");
-				return true;
-			}
-			if((ACCCON & 0x04) && addr >= 0x3000 && addr <= 0x7FFF)
-			{
-				addrInfo->start = 0x3000;
-				addrInfo->end = 0x7FFF;
-				sprintf(addrInfo->desc,"Shadow RAM (ACCCON bit 2 set)");
-				return true;
-			}
-			if((ACCCON & 0x02) && PrePC >= 0xC000 && PrePC <= 0xDFFF && addr >= 0x3000 && addr <= 0x7FFF)
-			{
-				addrInfo->start = 0x3000;
-				addrInfo->end = 0x7FFF;
-				sprintf(addrInfo->desc,"Shadow RAM (ACCCON bit 1 set and PC in VDU driver)");
-				return true;
-			}
+			addrInfo->start = 0x3000;
+			addrInfo->end   = 0x7fff;
+			addrInfo->desc  = "Shadow RAM";
+			return true;
 		}
-		else if (MachineType == Model::BPlus)
+
+		if (PrvEn)
 		{
-			if(addr >= 0x3000 && addr <= 0x7FFF)
-			{
-				addrInfo->start = 0x3000;
-				addrInfo->end = 0x7FFF;
-				if (Sh_Display && PrePC>=0xC000 && PrePC<=0xDFFF)
-				{
-					sprintf(addrInfo->desc,"Shadow RAM (PC in VDU driver)");
-					return true;
-				}
-				else if(Sh_Display && MemSel && PrePC>=0xA000 && PrePC <=0xAFFF)
-				{
-					addrInfo->start = 0x3000;
-					addrInfo->end = 0x7FFF;
-					sprintf(addrInfo->desc,"Shadow RAM (PC in upper 4K of ROM and shadow selected)");
-					return true;
-				}
-			}
-			else if(addr >= 0x8000 && addr <= 0xAFFF && MemSel)
+			if (Prvs8 && addr >= 0x8000 && addr <= 0x83ff)
 			{
 				addrInfo->start = 0x8000;
-				addrInfo->end = 0xAFFF;
-				sprintf(addrInfo->desc,"Paged RAM");
+				addrInfo->end   = 0x83ff;
+				addrInfo->desc  = "1K private area";
 				return true;
 			}
-		}
-		else if (MachineType == Model::IntegraB)
-		{
-			if(ShEn && !MemSel && addr >= 0x3000 && addr <= 0x7FFF)
+			else if (Prvs4 && addr >= 0x8000 && addr <= 0x8fff)
 			{
-				addrInfo->start = 0x3000;
-				addrInfo->end = 0x7FFF;
-				sprintf(addrInfo->desc,"Shadow RAM");
+				addrInfo->start = 0x8400;
+				addrInfo->end   = 0x8fff;
+				addrInfo->desc  = "4K private area";
 				return true;
 			}
-			if(PrvEn)
+			else if (Prvs1 && addr >= 0x9000 && addr <= 0xafff)
 			{
-				if(Prvs8 && addr >= 0x8000 && addr <= 0x83FF)
-				{
-					addrInfo->start = 0x8000;
-					addrInfo->end = 0x83FF;
-					sprintf(addrInfo->desc,"1K private area");
-					return true;
-				}
-				else if(Prvs4 && addr >= 0x8000 && addr <= 0x8FFF)
-				{
-					addrInfo->start = 0x8400;
-					addrInfo->end = 0x8FFF;
-					sprintf(addrInfo->desc,"4K private area");
-					return true;
-				}
-				else if(Prvs1 && addr >= 0x9000 && addr <= 0xAFFF)
-				{
-					addrInfo->start = 0x9000;
-					addrInfo->end = 0xAFFF;
-					sprintf(addrInfo->desc,"8K private area");
-					return true;
-				}
+				addrInfo->start = 0x9000;
+				addrInfo->end   = 0xafff;
+				addrInfo->desc  = "8K private area";
+				return true;
 			}
 		}
 
-		// Try OS map:
-		if(MemoryMaps[16].count > 0)
+		if (addr >= 0x8000 && addr < 0xc000)
 		{
-			for (int i = 0; i < MemoryMaps[16].count; i++)
-			{
-				if(addr >= MemoryMaps[16].entries[i].start && addr <= MemoryMaps[16].entries[i].end)
-				{
-					memcpy(addrInfo, &MemoryMaps[16].entries[i], sizeof(AddrInfo));
-					return true;
-				}
-			}
+			DebugLookupSWRAddress(addrInfo);
+			return true;
 		}
 	}
+	else if (MachineType == Model::BPlus)
+	{
+		if (addr >= 0x3000 && addr <= 0x7fff)
+		{
+			addrInfo->start = 0x3000;
+			addrInfo->end   = 0x7fff;
+
+			if (Sh_Display && PrePC >= 0xc000 && PrePC <= 0xdfff)
+			{
+				addrInfo->desc = "Shadow RAM (PC in VDU driver)";
+				return true;
+			}
+			else if (Sh_Display && MemSel && PrePC >= 0xa000 && PrePC <= 0xafff)
+			{
+				addrInfo->start = 0x3000;
+				addrInfo->end   = 0x7fff;
+				addrInfo->desc  = "Shadow RAM (PC in upper 4K of ROM and shadow selected)";
+				return true;
+			}
+		}
+		else if (addr >= 0x8000 && addr <= 0xafff && MemSel)
+		{
+			addrInfo->start = 0x8000;
+			addrInfo->end   = 0xafff;
+			addrInfo->desc  = "Paged RAM";
+			return true;
+		}
+		else if (addr >= 0x8000 && addr < 0xc000)
+		{
+			DebugLookupSWRAddress(addrInfo);
+			return true;
+		}
+	}
+	else if (MachineType == Model::Master128)
+	{
+		// Master cartridge (not implemented in BeebEm yet)
+		if ((ACCCON & 0x20) && addr >= 0xfc00 && addr <= 0xfdff)
+		{
+			addrInfo->start = 0xfc00;
+			addrInfo->end   = 0xfdff;
+			addrInfo->desc  = "Cartridge (ACCCON bit 5 set)";
+			return true;
+		}
+
+		// Master private and shadow RAM.
+		if ((ACCCON & 0x08) && addr >= 0xc000 && addr <= 0xdfff)
+		{
+			addrInfo->start = 0xc000;
+			addrInfo->end   = 0xdfff;
+			addrInfo->desc  = "8K Private RAM (ACCCON bit 3 set)";
+			return true;
+		}
+
+		if ((ACCCON & 0x04) && addr >= 0x3000 && addr <= 0x7fff)
+		{
+			addrInfo->start = 0x3000;
+			addrInfo->end   = 0x7fff;
+			addrInfo->desc  = "Shadow RAM (ACCCON bit 2 set)";
+			return true;
+		}
+
+		if ((ACCCON & 0x02) && PrePC >= 0xC000 && PrePC <= 0xDFFF && addr >= 0x3000 && addr <= 0x7FFF)
+		{
+			addrInfo->start = 0x3000;
+			addrInfo->end   = 0x7fff;
+			addrInfo->desc  = "Shadow RAM (ACCCON bit 1 set and PC in VDU driver)";
+			return true;
+		}
+
+		// Master private RAM.
+		if ((PagedRomReg & 0x80) && addr >= 0x8000 && addr <= 0x8fff)
+		{
+			addrInfo->start = 0x8000;
+			addrInfo->end   = 0x8fff;
+			addrInfo->desc  = "4K Private RAM (ROMSEL bit 7 set)";
+			return true;
+		}
+
+		if (addr >= 0x8000 && addr < 0xc000)
+		{
+			DebugLookupSWRAddress(addrInfo);
+			return true;
+		}
+	}
+
 	return false;
 }
 
@@ -1799,75 +1952,64 @@ void DebugInitMemoryMaps()
 {
 	for(int i = 0; i < _countof(MemoryMaps); i++)
 	{
-		MemoryMaps[i].count = 0;
+		MemoryMaps[i].clear();
 	}
 }
 
 bool DebugLoadMemoryMap(char* filename, int bank)
 {
-	if(bank < 0 || bank > 16)
+	if (bank < 0 || bank > 16)
 		return false;
 
 	MemoryMap* map = &MemoryMaps[bank];
+
 	FILE *infile = fopen(filename, "r");
-	if (infile == NULL)
+
+	if (infile != nullptr)
 	{
-		return false;
-	}
-	else
-	{
-		map->count = 0;
-		map->entries = NULL;
+		map->clear();
 
 		char line[1024];
 
-		while(fgets(line, _countof(line), infile) != NULL)
+		while (fgets(line, _countof(line), infile) != nullptr)
 		{
 			DebugChompString(line);
 			char *buf = line;
+
 			while(buf[0] == ' ' || buf[0] == '\t' || buf[0] == '\r' || buf[0] == '\n')
 				buf++;
-			if(buf[0] == ';' || buf[0] == '\0')	// Skip comments and empty lines
+
+			if (buf[0] == ';' || buf[0] == '\0') // Skip comments and empty lines
 				continue;
-			if(map->count % 256 == 0)
+
+			AddrInfo entry;
+
+			char desc[256];
+			memset(desc, 0, sizeof(desc));
+
+			int result = sscanf(buf, "%x %x %99c", &entry.start, &entry.end, desc);
+
+			if (result >= 2 && strlen(desc) > 0)
 			{
-				AddrInfo* newAddrInfo = (AddrInfo*)realloc(map->entries, (map->count + 256) * sizeof(AddrInfo));
-				if(newAddrInfo == NULL)
-				{
-					fclose(infile);
-					mainWin->Report(MessageType::Error, "Allocation failure reading memory map!");
-
-					if(map->entries != NULL)
-					{
-						free(map->entries);
-						map->entries = NULL;
-						map->count = 0;
-					}
-					return false;
-				}
-				map->entries = newAddrInfo;
-			}
-
-			AddrInfo* entry = &map->entries[map->count];
-
-			memset(entry->desc, 0, _countof(entry->desc));
-			int result = sscanf(buf, "%x %x %99c", &entry->start, &entry->end, &entry->desc);
-			if (result >= 2 && strlen(entry->desc) > 0)
-			{
-				map->count++;
+				entry.desc = desc;
+				map->push_back(entry);
 			}
 			else
 			{
 				mainWin->Report(MessageType::Error, "Invalid memory map format!");
 
-				free(map->entries);
-				map->entries = NULL;
-				map->count = 0;
+				map->clear();
+
 				fclose(infile);
 				return false;
 			}
 		}
+
 		fclose(infile);
+	}
+	else
+	{
+		return false;
 	}
 
 	return true;
@@ -2244,7 +2386,7 @@ static bool DebugCmdFile(char* args)
 		sscanf(args,"%c %x %259c", &mode, &addr, filename);
 	}
 
-	mode = tolower(mode);
+	mode = static_cast<char>(tolower(mode));
 
 	if (filename[0] == '\0')
 	{
@@ -2759,16 +2901,23 @@ static bool DebugCmdHelp(char* args)
 			}
 		}
 		// Display help for address
-		if(sscanf(args, "%x", &addr) == 1)
+		if (sscanf(args, "%x", &addr) == 1)
 		{
-			if(DebugLookupAddress(addr, &addrInfo))
-				DebugDisplayInfoF("0x%04X: %s (0x%04X-0x%04X)", addr, addrInfo.desc, addrInfo.start, addrInfo.end);
+			if (DebugLookupAddress(addr, &addrInfo))
+			{
+				DebugDisplayInfoF("0x%04X: %s (0x%04X-0x%04X)", addr, addrInfo.desc.c_str(), addrInfo.start, addrInfo.end);
+			}
 			else
+			{
 				DebugDisplayInfoF("0x%04X: No description", addr);
+			}
 		}
 		else
+		{
 			DebugDisplayInfoF("Help: Command %s was not recognised.", args);
+		}
 	}
+
 	return true;
 }
 
@@ -2864,12 +3013,11 @@ static bool DebugCmdWatch(char *args)
 	Watch w;
 	char info[64];
 	int i;
-	memset(w.name, 0, _countof(w.name));
 	w.start = -1;
 	w.host = true;
 	w.type = 'w';
 
-	if (WCount < _countof(Watches))
+	if (Watches.size() < MAX_BPS)
 	{
 		if (tolower(args[0]) == 'p') // Parasite
 		{
@@ -2877,44 +3025,47 @@ static bool DebugCmdWatch(char *args)
 			args++;
 		}
 
-		int result = sscanf(args, "%x %c %50c", &w.start, &w.type, w.name);
+		char name[51];
+		memset(name, 0, _countof(name));
+
+		int result = sscanf(args, "%x %c %50c", &w.start, &w.type, name);
 
 		if (result < 2) {
-			result = sscanf(args, "%x %50c", &w.start, w.name);
+			result = sscanf(args, "%x %50c", &w.start, name);
 		}
 
 		if (result != EOF)
 		{
 			// Check type is valid
 			w.type = (char)tolower(w.type);
-			if(w.type != 'b' && w.type != 'w' && w.type != 'd')
+			if (w.type != 'b' && w.type != 'w' && w.type != 'd')
 				return false;
+
+			w.name = name;
 
 			sprintf(info, "%s%04X", (w.host ? "" : "p"), w.start);
 
 			// Check if watch in list
 			i = (int)SendMessage(hwndW, LB_FINDSTRING, 0, (LPARAM)info);
+
 			if (i != LB_ERR)
 			{
 				SendMessage(hwndW, LB_DELETESTRING, i, 0);
-				for (i = 0; i < WCount; ++i)
-				{
-					if (Watches[i].start == w.start)
-					{
-						if (i != WCount - 1)
-							memmove(&Watches[i], &Watches[i+1], sizeof(Watch) * (WCount - i - 1));
-						WCount--;
-						break;
-					}
-				}
+
+				auto it = std::find_if(Watches.begin(), Watches.end(), [&w](const Watch& watch){
+					return watch.start == w.start;
+				});
+
+				Watches.erase(it);
 			}
 			else
 			{
-				memcpy(&Watches[WCount], &w, sizeof(Watch));
-				WCount++;
+				Watches.push_back(w);
+
 				SendMessage(hwndW, LB_ADDSTRING, 0, (LPARAM)info);
 				DebugUpdateWatches(true);
 			}
+
 			SetDlgItemText(hwndDebug, IDC_DEBUGCOMMAND, "");
 		}
 		else
@@ -2931,52 +3082,60 @@ static bool DebugCmdWatch(char *args)
 
 static bool DebugCmdToggleBreak(char *args)
 {
-	int i;
 	Breakpoint bp;
-	char info[64];
-
-	memset(bp.name, 0, _countof(bp.name));
 	bp.start = bp.end = -1;
 
-	if (BPCount < _countof(Breakpoints))
+	if (Breakpoints.size() < MAX_BPS)
 	{
-		if (sscanf(args, "%x-%x %50c", &bp.start, &bp.end, bp.name) >= 2 ||
-			sscanf(args, "%x %50c", &bp.start, bp.name) >= 1)
+		char name[51];
+		memset(name, 0, _countof(name));
+
+		if (sscanf(args, "%x-%x %50c", &bp.start, &bp.end, name) >= 2 ||
+		    sscanf(args, "%x %50c", &bp.start, name) >= 1)
 		{
-			sprintf(info, "%04X", bp.start);
+			bp.name = name;
+
 			// Check if BP in list
-			i = (int)SendMessage(hwndBP, LB_FINDSTRING, 0, (LPARAM)info);
+
+			char info[64];
+			sprintf(info, "%04X", bp.start);
+
+			int i = (int)SendMessage(hwndBP, LB_FINDSTRING, 0, (LPARAM)info);
+
 			if (i != LB_ERR)
 			{
 				// Yes - delete
 				SendMessage(hwndBP, LB_DELETESTRING, i, 0);
-				for (i = 0; i < BPCount; i++)
-				{
-					if (Breakpoints[i].start == bp.start)
-					{
-						if (i != BPCount - 1)
-							memmove(&Breakpoints[i], &Breakpoints[i+1], sizeof(Breakpoint) * (BPCount - i - 1));
-						BPCount--;
-						break;
-					}
-				}
+
+				auto it = std::find_if(Breakpoints.begin(), Breakpoints.end(), [&bp](const Breakpoint& b){
+					return b.start == bp.start;
+				});
+
+				Breakpoints.erase(it);
 			}
 			else
 			{
-				if(bp.end >= 0 && bp.end < bp.start)
+				if (bp.end >= 0 && bp.end < bp.start)
 				{
 					DebugDisplayInfo("Error: Invalid breakpoint range.");
 					return false;
 				}
+
 				// No - add a new bp.
-				memcpy(&Breakpoints[BPCount], &bp, sizeof(Breakpoint));
-				if (Breakpoints[BPCount].end >= 0)
-					sprintf(info, "%04X-%04X %s", Breakpoints[BPCount].start, Breakpoints[BPCount].end, Breakpoints[BPCount].name);
+				Breakpoints.push_back(bp);
+
+				if (bp.end >= 0)
+				{
+					sprintf(info, "%04X-%04X %s", bp.start, bp.end, bp.name.c_str());
+				}
 				else
-					sprintf(info, "%04X %s", Breakpoints[BPCount].start, Breakpoints[BPCount].name);
-				BPCount++;
+				{
+					sprintf(info, "%04X %s", bp.start, bp.name.c_str());
+				}
+
 				SendMessage(hwndBP, LB_ADDSTRING, 0, (LPARAM)info);
 			}
+
 			SetDlgItemText(hwndDebug, IDC_DEBUGCOMMAND, "");
 		}
 		else
@@ -2988,6 +3147,7 @@ static bool DebugCmdToggleBreak(char *args)
 	{
 		DebugDisplayInfo("You have too many breakpoints!");
 	}
+
 	return true;
 }
 
@@ -3148,9 +3308,9 @@ int DebugDisassembleInstruction(int addr, bool host, char *opstr)
 
 int DebugDisassembleInstructionWithCPUStatus(int addr,
                                              bool host,
-                                             unsigned char Accumulator,
-                                             unsigned char XReg,
-                                             unsigned char YReg,
+                                             int Accumulator,
+                                             int XReg,
+                                             int YReg,
                                              unsigned char StackReg,
                                              unsigned char PSR,
                                              char *opstr)

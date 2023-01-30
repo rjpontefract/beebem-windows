@@ -31,7 +31,6 @@ keyboard emulation - David Alan Gilbert 30/10/94 */
 
 extern VIAState SysVIAState;
 extern unsigned char IC32State;
-extern bool RTCY2KAdjust;
 
 void SysVIAWrite(int Address, unsigned char Value);
 unsigned char SysVIARead(int Address);
@@ -48,13 +47,14 @@ void BeebReleaseAllKeys(void);
 void SysVIATriggerCA1Int(int value);
 extern unsigned char IC32State;
 
-void RTCInit(void);
-void CMOSWrite(unsigned char CMOSAddr,unsigned char CMOSData);
-unsigned char CMOSRead(unsigned char CMOSAddr);
+// Master 128 MC146818AP Real-Time Clock and RAM
+void RTCInit();
+void CMOSWrite(unsigned char Address, unsigned char Value);
+unsigned char CMOSRead(unsigned char Address);
+extern unsigned char CMOSRAM[64]; // RTC registers + 50 bytes CMOS RAM
+extern const unsigned char CMOSDefault[50];
 
 void PulseSysViaCB1(void);
-
-unsigned char BCD(unsigned char nonBCD);
 
 extern bool JoystickButton[2];
 
